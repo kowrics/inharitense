@@ -1,0 +1,523 @@
+{% extends 'base.html' %}
+
+{% block heading %}Inventory Management{% endblock %}
+
+{% block subtitle %}
+Centralized stock records with quantity, thresholds, vendor, custodian, and item codes.
+{% endblock %}
+
+{% block content %}
+
+<div class="page-toolbar">
+    <div>
+        <div class="eyebrow">LIVE STOCK RECORDS</div>
+        <h2>Inventory items</h2>
+        <p>Search, scan, edit, and record Stock IN / OUT without leaving the workspace.</p>
+    </div>
+
+    {% if can_edit %}
+    <button class="primary" type="button" onclick="openItemModal()">+ Add item</button>
+    {% endif %}
+</div>
+
+<div class="toolbar">
+    <input
+        id="search"
+        type="text"
+        placeholder="Search item, item no., QR/bar tag, vendor..."
+    >
+
+    <select id="cat">
+        <option value="">All allowed categories</option>
+        {% for c in categories %}
+        <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+    </select>
+
+    <button class="secondary" type="button" onclick="startScanner()">
+        ▣ Scan code
+    </button>
+</div>
+
+<div class="panel table-panel">
+
+    <div class="panel-head">
+        <div>
+            <h3>Inventory records</h3>
+            <small>Duplicate item numbers, names, and codes are blocked.</small>
+        </div>
+
+        <div class="report-links">
+            <a href="{{ url_for('report', kind='stock') }}">CSV</a>
+            <a href="{{ url_for('report_xlsx', kind='stock') }}">Excel</a>
+            <a href="{{ url_for('report', kind='valuation') }}">Valuation</a>
+        </div>
+    </div>
+
+    <div class="table-wrap">
+
+        <table id="inv">
+
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Category</th>
+                    <th>Vendor</th>
+                    <th>Unit</th>
+                    <th>On hand</th>
+                    <th>Min / Max</th>
+                    <th>Level</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+
+            <tbody>
+
+                {% for i in items %}
+
+                <tr
+                    data-search="{{ (i.name ~ ' ' ~ i.item_no ~ ' ' ~ (i.code or '') ~ ' ' ~ i.category ~ ' ' ~ (i.vendor or '')) | lower }}"
+                    data-cat="{{ i.category }}"
+                >
+
+                    <td>
+                        <b>{{ i.name }}</b>
+                        <small>
+                            {{ i.item_no }} · {{ i.code or 'No code' }}
+                        </small>
+                    </td>
+
+                    <td><span class="cat-badge">{{ i.category }}</span></td>
+
+                    <td>{{ i.vendor or '—' }}</td>
+
+                    <td>{{ i.unit }}</td>
+
+                    <td>
+                        <strong class="qty" data-id="{{ i.id }}">
+                            {{ i.qty }}
+                        </strong>
+                    </td>
+
+                    <td>
+                        {{ i.min_qty }} / {{ i.max_qty }}
+                    </td>
+
+                    <td>
+                        {% set stock_percent = ((i.qty / i.max_qty * 100) if i.max_qty else 0) | round | int %}
+                        <div class="bar">
+                            <i style="width: {{ [100, stock_percent] | min }}%;"></i>
+                        </div>
+                    </td>
+
+                    <td>
+                        <span class="status {{ 'low' if i.qty <= i.min_qty else 'ok' }}">
+                            {% if i.qty == 0 %}
+                                Out
+                            {% elif i.qty <= i.min_qty %}
+                                Reorder
+                            {% else %}
+                                Healthy
+                            {% endif %}
+                        </span>
+                    </td>
+
+                    <td>
+                        <div class="row-actions">
+
+                            {% if can_edit %}
+
+                            <button
+                                type="button"
+                                onclick="quickMove({{ i.id }}, 'out')"
+                                title="Stock OUT"
+                            >
+                                −
+                            </button>
+
+                            <button
+                                type="button"
+                                onclick="quickMove({{ i.id }}, 'in')"
+                                title="Stock IN"
+                            >
+                                +
+                            </button>
+
+                            <button
+                                type="button"
+                                onclick="editItem({{ i | tojson }})"
+                                title="Edit"
+                            >
+                                ✎
+                            </button>
+
+                            <button
+                                type="button"
+                                class="danger-icon"
+                                onclick="deleteItem({{ i.id }}, {{ i.name | tojson }})"
+                                title="Delete"
+                            >
+                                ×
+                            </button>
+
+                            {% else %}
+
+                            <span class="muted">Read only</span>
+
+                            {% endif %}
+
+                        </div>
+                    </td>
+
+                </tr>
+
+                {% endfor %}
+
+            </tbody>
+
+        </table>
+
+    </div>
+
+</div>
+
+
+{% if can_edit %}
+
+<div class="grid two">
+
+    <div class="panel">
+
+        <div class="panel-head">
+            <div>
+                <h3>Stock movement</h3>
+                <small>
+                    Use exact quantities for receiving or issuing stock.
+                </small>
+            </div>
+        </div>
+
+        <form id="movementForm" class="movement-form">
+
+            {% if request.endpoint != "login" %}
+            <input
+                type="hidden"
+                name="_csrf"
+                value="{{ csrf_token() }}"
+            >
+            {% endif %}
+
+            <label>
+                Item
+
+                <select id="moveItem">
+
+                    {% for i in items %}
+                    <option value="{{ i.id }}" data-code="{{ i.item_no }}">
+                        {{ i.name }} · {{ i.qty }} {{ i.unit }}
+                    </option>
+                    {% endfor %}
+
+                </select>
+            </label>
+
+            <label>
+                Type
+
+                <select id="moveType">
+                    <option value="in">Stock IN</option>
+                    <option value="out">Stock OUT</option>
+                </select>
+            </label>
+
+            <label>
+                Quantity
+
+                <input
+                    id="moveQty"
+                    type="number"
+                    min="1"
+                    value="1"
+                >
+            </label>
+
+            <label>
+                Note
+
+                <input
+                    id="moveNote"
+                    type="text"
+                    placeholder="e.g. received delivery / issued to department"
+                >
+            </label>
+
+            <button
+                class="primary"
+                type="submit"
+            >
+                Record movement
+            </button>
+
+        </form>
+
+    </div>
+
+
+    <div class="panel">
+
+        <div class="panel-head">
+            <div>
+                <h3>Code scanner</h3>
+                <small>
+                    Find an item by its item number or registered QR/bar tag.
+                </small>
+            </div>
+        </div>
+
+        <div class="scan">
+
+            <input
+                id="scan"
+                type="text"
+                placeholder="ECMCI-PPE-001"
+            >
+
+            <button
+                class="secondary"
+                type="button"
+                onclick="scanItem()"
+            >
+                Find
+            </button>
+
+        </div>
+
+        <div id="scanResult" class="scan-result">
+            Camera scanning is available when the browser supports BarcodeDetector.
+        </div>
+
+    </div>
+
+</div>
+
+{% endif %}
+
+
+<div id="itemModal" class="modal">
+
+    <div class="modal-card">
+
+        <div class="modal-head">
+
+            <div>
+                <div class="eyebrow">INVENTORY RECORD</div>
+                <h2 id="modalTitle">Add item</h2>
+            </div>
+
+            <button
+                type="button"
+                onclick="closeItemModal()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <form id="itemForm" class="form-grid">
+
+            {% if request.endpoint != "login" %}
+            <input
+                type="hidden"
+                name="_csrf"
+                value="{{ csrf_token() }}"
+            >
+            {% endif %}
+
+            <div class="form-hint span2">
+                Pick the category and unit first — the item number and code below will be
+                suggested automatically. You can still edit them if you need something different.
+            </div>
+
+            <label>
+                Category
+                <select name="category" id="fCategory" required onchange="suggestItemCode()">
+                    <option value="" disabled selected>Choose a category…</option>
+                    {% for c in categories %}
+                    <option value="{{ c }}">{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label>
+                Unit
+                <input name="unit" id="fUnit" type="text" placeholder="e.g. box, piece, ream" onchange="suggestItemCode()">
+            </label>
+
+            <label>
+                Item number
+                <input name="item_no" id="fItemNo" type="text" required placeholder="Auto-suggested once category is set">
+            </label>
+
+            <label>
+                QR / bar tag / serial code <span class="optional-tag">(optional)</span>
+                <input name="code" id="fCode" type="text" placeholder="Auto-filled from item number">
+            </label>
+
+            <label class="span2">
+                Item name
+                <input name="name" type="text" required>
+            </label>
+
+            <label>
+                Current stock
+                <input name="qty" type="number" min="0" value="0">
+            </label>
+
+            <label>
+                Unit cost (₱)
+                <input name="cost" type="number" step="0.01" min="0" value="0">
+            </label>
+
+            <label>
+                Minimum threshold
+                <input name="min_qty" type="number" min="0" value="0">
+            </label>
+
+            <label>
+                Maximum stock
+                <input name="max_qty" type="number" min="1" value="1">
+            </label>
+
+            <label>
+                Vendor
+                <input name="vendor" type="text">
+            </label>
+
+            <label>
+                Custodian
+                <input name="custodian" type="text">
+            </label>
+
+            <label>
+                Condition
+                <select name="condition">
+                    <option value="Good">Good</option>
+                    <option value="Damaged">Damaged</option>
+                    <option value="For Disposal">For Disposal</option>
+                </select>
+            </label>
+
+            <label>
+                Received date
+                <input name="received_date" type="date">
+            </label>
+
+            <label class="span2">
+                Expiry <span class="optional-tag">(optional, if applicable)</span>
+                <input name="expiry" type="date">
+            </label>
+
+            <input
+                type="hidden"
+                name="id"
+                id="itemId"
+            >
+
+
+            <div class="modal-actions">
+
+                <button
+                    type="button"
+                    class="secondary"
+                    onclick="closeItemModal()"
+                >
+                    Cancel
+                </button>
+
+                <button
+                    class="primary"
+                    type="submit"
+                >
+                    Save item
+                </button>
+
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+
+<div id="scannerModal" class="modal">
+
+    <div class="modal-card scanner-card">
+
+        <div class="modal-head">
+
+            <div>
+                <div class="eyebrow">SCAN ITEM</div>
+                <h2>Camera scanner</h2>
+            </div>
+
+            <button
+                type="button"
+                onclick="stopScanner()"
+            >
+                ×
+            </button>
+
+        </div>
+
+
+        <video
+            id="scannerVideo"
+            autoplay
+            playsinline
+        ></video>
+
+
+        <p id="scannerStatus">
+            Point the camera at a QR/barcode. If camera scanning is unavailable,
+            use the manual code field.
+        </p>
+
+
+        <div class="modal-actions">
+
+            <button
+                class="secondary"
+                type="button"
+                onclick="stopScanner()"
+            >
+                Close
+            </button>
+
+            <button
+                class="primary"
+                type="button"
+                onclick="demoScan()"
+            >
+                Demo scan first item
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+
+<script>
+    initInventoryFilter();
+    initMovementForm();
+</script>
+
+{% endblock %}
