@@ -30,7 +30,7 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
     <select id="cat">
         <option value="">All allowed categories</option>
         {% for c in categories %}
-        <option value="{{ c }}">{{ c }}</option>
+        <option value="{{ c }}" {{ 'selected' if c == selected_category else '' }}>{{ c }}</option>
         {% endfor %}
     </select>
 
@@ -146,7 +146,25 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
 
                             <button
                                 type="button"
-                                onclick="editItem({{ i | tojson }})"
+                                onclick='editItem({{
+                                    {
+                                        "id": i.id,
+                                        "item_no": i.item_no,
+                                        "code": i.code or "",
+                                        "name": i.name,
+                                        "category": i.category,
+                                        "unit": i.unit,
+                                        "qty": i.qty,
+                                        "max_qty": i.max_qty,
+                                        "min_qty": i.min_qty,
+                                        "cost": i.cost,
+                                        "vendor": i.vendor or "",
+                                        "custodian": i.custodian or "",
+                                        "condition": i.condition or "Good",
+                                        "received_date": i.received_date or "",
+                                        "expiry": i.expiry or ""
+                                    } | tojson
+                                }})'
                                 title="Edit"
                             >
                                 ✎

@@ -214,7 +214,14 @@ def dashboard_payload():
     health={'healthy':sum(1 for x in inv if x['qty']>x['min_qty']),'reorder':sum(1 for x in inv if 0<x['qty']<=x['min_qty']),'out':len(out)};requests_count=c.execute("SELECT COUNT(*) n FROM requests WHERE status IN ('For Review','Forwarded to HR','Approved')").fetchone()['n'];unread=c.execute("SELECT COUNT(*) n FROM notifications WHERE read_flag=0 AND (recipient_role=? OR recipient_user=?)",(u['role'],u['id'])).fetchone()['n'];c.close();return {'total_items':len(inv),'categories':len(cats),'low':len(low),'out':len(out),'expiring':len(exp),'pending':pending,'pending_all':requests_count,'value':round(value,2),'movements':days,'category_levels':bycat,'health':health,'recent':[dict(x) for x in recent],'unread':unread}
 
 @app.context_processor
-def inject():u=current_user();return {'me':u,'role_labels':ROLE_LABELS,'categories':CATEGORIES}
+def inject():
+    u=current_user()
+    cats=ROLE_CATEGORIES[u['role']] if u else CATEGORIES
+    counts={}
+    if u:
+        c=db();rows=c.execute('SELECT category, COUNT(*) n FROM inventory GROUP BY category').fetchall();c.close()
+        counts={r['category']:r['n'] for r in rows}
+    return {'me':u,'role_labels':ROLE_LABELS,'categories':cats,'category_counts':counts}
 
 @app.route('/login',methods=['GET','POST'])
 def login():
@@ -239,9 +246,9 @@ def dashboard():return render_template('dashboard.html',data=dashboard_payload()
 @login_required
 def inventory_page():
     u=current_user();cats=ROLE_CATEGORIES[u['role']];ph=','.join('?'*len(cats));c=db();items=c.execute(f'SELECT * FROM inventory WHERE category IN ({ph}) ORDER BY category,name',cats).fetchall();vendors=c.execute('SELECT name FROM vendors WHERE status="Active" ORDER BY name').fetchall();c.close()
-    # Converted to plain dicts (not sqlite3.Row) so Jinja's |tojson filter can serialize each row —
-    # this is what the "Edit" button's onclick now embeds directly (see editItemById fix below).
-    return render_template('inventory.html',items=[dict(x) for x in items],vendors=vendors,can_edit=u['role'] in ('HR','Purchasing','IT Custodian'))
+    selected_category=request.args.get('category','')
+    if selected_category not in cats:selected_category=''
+    return render_template('inventory.html',items=[dict(x) for x in items],vendors=vendors,can_edit=u['role'] in ('HR','Purchasing','IT Custodian'),selected_category=selected_category)
 
 CATEGORY_PREFIX={'PPE & Infection Control':'PPE','Health & Safety':'HSE','Office Operations':'OFF','IT & BPO Equipment':'ITB','Facility & Sanitation':'FAC'}
 @app.route('/api/inventory/next-code')
