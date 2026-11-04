@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Asset Controls{% endblock %}{% block heading %}Asset Controls & Approvals{% endblock %}
+{% block subtitle %}Create requests separately from reviewing approvals. Stock is not changed until approval.{% endblock %}
+{% block content %}
+<div class="workspace-tabbed" data-workspace="asset-controls">
+<div class="workspace-intro"><span class="workspace-kicker">ASSET MANAGEMENT</span><h2>Choose what you need to do</h2><p>Only the selected task is shown. Requests and approval histories stay separate.</p></div>
+{% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+<div class="panel"><h2>Request asset disposal</h2><p>Stock remains unchanged until Finance approves the request.</p>
+<form method="post" action="{{url_for('disposal_request')}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}">
+<label>Inventory item<select name="inventory_id" required>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} · {{i.name}} ({{i.qty}} available)</option>{% endfor %}</select></label>
+<label>Quantity<input type="number" name="quantity" min="1" required></label><label>Reason<input name="reason" minlength="5" maxlength="1000" required></label><button class="primary">Submit disposal request</button></form></div>
+{% endif %}
+{% if me.role in ('Super User','Admin','Encoder') %}
+<div class="panel"><h2>Request stock correction</h2><p>Inventory Manager approval is required before any stock balance changes.</p>
+<form method="post" action="{{url_for('adjustment_request')}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}">
+<label>Inventory item<select name="inventory_id" required>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} · {{i.name}} (Current: {{i.qty}})</option>{% endfor %}</select></label>
+<label>Proposed total quantity<input type="number" name="proposed_qty" min="0" required></label><label>Reason<input name="reason" minlength="5" maxlength="1000" required></label><button class="primary">Submit adjustment request</button></form></div>
+{% endif %}
+<div class="panel table-panel"><h2>Disposal approval queue</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Item</th><th>Qty</th><th>Reason</th><th>Status</th><th>Requested by</th><th>Decision</th></tr></thead><tbody>
+{% for d in disposals %}<tr><td>{{d.reference_no}}</td><td>{{d.item_no}} · {{d.item_name}}</td><td>{{d.quantity}}</td><td>{{d.reason}}</td><td>{{d.status}}</td><td>{{d.requester}}</td><td>{% if d.status=='Pending Finance Approval' and me.role in ('Finance','Super User','Admin') %}<form method="post" action="{{url_for('disposal_decision',did=d.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input name="decision_note" placeholder="Decision note / rejection reason"><button name="decision" value="approve" class="primary">Approve</button><button name="decision" value="reject" class="secondary">Reject</button></form>{% else %}{{d.decision_maker or '—'}} {{d.decision_note or ''}}{% endif %}</td></tr>{% else %}<tr><td colspan="7">No disposal requests yet.</td></tr>{% endfor %}
+</tbody></table></div></div>
+<div class="panel table-panel"><h2>Stock adjustment approval queue</h2><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Item</th><th>Recorded</th><th>Proposed</th><th>Reason</th><th>Status</th><th>Requested by</th><th>Decision</th></tr></thead><tbody>
+{% for a in adjustments %}<tr><td>{{a.reference_no}}</td><td>{{a.item_no}} · {{a.item_name}}</td><td>{{a.expected_qty}}</td><td>{{a.proposed_qty}}</td><td>{{a.reason}}</td><td>{{a.status}}</td><td>{{a.requester}}</td><td>{% if a.status=='Pending Manager Approval' and me.role in ('Inventory Manager','Super User','Admin') %}<form method="post" action="{{url_for('adjustment_decision',aid=a.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input name="decision_note" placeholder="Decision note / rejection reason"><button name="decision" value="approve" class="primary">Approve</button><button name="decision" value="reject" class="secondary">Reject</button></form>{% else %}{{a.decision_maker or '—'}} {{a.decision_note or ''}}{% endif %}</td></tr>{% else %}<tr><td colspan="8">No stock adjustments yet.</td></tr>{% endfor %}
+</tbody></table></div></div>
+</div>
+{% endblock %}

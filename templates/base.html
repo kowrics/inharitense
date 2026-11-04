@@ -14,13 +14,11 @@
         rel="stylesheet"
     >
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/jsQR.js') }}"></script>
 
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='css/app.css') }}"
-    >
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/workspace-redesign.css') }}">
 </head>
 
 <body>
@@ -39,78 +37,53 @@
         </div>
 
 
-        <nav>
-
-            <span>WORKSPACE</span>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'dashboard' else '' }}"
-                href="{{ url_for('dashboard') }}"
-            >
-                <i>⌂</i>
-                Dashboard
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'inventory_page' else '' }}"
-                href="{{ url_for('inventory_page') }}"
-            >
-                <i>▦</i>
-                Inventory
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'requests_page' else '' }}"
-                href="{{ url_for('requests_page') }}"
-            >
-                <i>↗</i>
-                Requests
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'forecast_page' else '' }}"
-                href="{{ url_for('forecast_page') }}"
-            >
-                <i>⌁</i>
-                AI Demand Forecast
-            </a>
-
-
-            <span>OPERATIONS</span>
-
-            {% if me and me.role == 'Purchasing' %}
-
-            <a
-                class="{{ 'active' if request.endpoint == 'vendors_page' else '' }}"
-                href="{{ url_for('vendors_page') }}"
-            >
-                <i>◇</i>
-                Vendors & Purchasing
-            </a>
-
-            {% endif %}
-
-
-            {% if me and me.role == 'HR' %}
-
-            <a
-                class="{{ 'active' if request.endpoint == 'users_page' else '' }}"
-                href="{{ url_for('users_page') }}"
-            >
-                <i>⚙</i>
-                Users & Audit
-            </a>
-
-            {% endif %}
-
+        <nav class="workspace-nav" aria-label="Main navigation">
+          <span>OVERVIEW</span>
+          <a class="{{'active' if request.endpoint=='dashboard' else ''}}" href="{{url_for('dashboard')}}"><i>⌂</i>Dashboard</a>
+          <span>INVENTORY OPERATIONS</span>
+          {% if me.role in ('Super User','Encoder','Admin','Inventory Manager') %}
+          <a class="{{'active' if request.endpoint=='inventory_page' else ''}}" href="{{url_for('inventory_page')}}"><i>▦</i>Inventory & Stock</a>
+          <a class="{{'active' if request.endpoint in ('inventory_audit_page','inventory_audit_detail') else ''}}" href="{{url_for('inventory_audit_page')}}"><i>◎</i>Physical Inventory</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Employee') %}
+          <a class="{{'active' if request.endpoint=='assignments_page' else ''}}" href="{{url_for('assignments_page')}}"><i>✓</i>{{'My Items' if me.role=='Employee' else 'Assignments'}}</a>
+          <a class="{{'active' if request.endpoint=='requests_page' else ''}}" href="{{url_for('requests_page')}}"><i>↗</i>{{'My Requests' if me.role=='Employee' else 'Stock Requests'}}</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Finance') %}
+          <a class="{{'active' if request.endpoint=='asset_controls_page' or (request.endpoint and request.endpoint.startswith(('disposal_','adjustment_'))) else ''}}" href="{{url_for('asset_controls_page')}}"><i>⚖</i>Approvals & Corrections</a>
+          <a class="{{'active' if request.endpoint=='asset_operations_page' or (request.endpoint and request.endpoint.startswith(('asset_transfer','asset_maintenance'))) else ''}}" href="{{url_for('asset_operations_page')}}"><i>⇄</i>Transfers & Maintenance</a>
+          {% endif %}
+          <span>PURCHASING</span>
+          {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Requisition Officer') %}
+          <a class="{{'active' if request.endpoint=='requisitions_page' else ''}}" href="{{url_for('requisitions_page')}}"><i>▤</i>Purchase Requisitions</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Inventory Manager','Requisition Officer','Encoder','Finance') %}
+          <a class="{{'active' if request.endpoint and request.endpoint.startswith('procurement_') else ''}}" href="{{url_for('procurement_page')}}"><i>▣</i>Orders & Receiving</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Requisition Officer') %}
+          <a class="{{'active' if request.endpoint=='vendors_page' else ''}}" href="{{url_for('vendors_page')}}"><i>◈</i>Suppliers</a>
+          {% endif %}
+          <span>INSIGHTS & ADMIN</span>
+          {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Report Generator') %}
+          <a class="{{'active' if request.endpoint=='forecast_page' else ''}}" href="{{url_for('forecast_page')}}"><i>⌁</i>Demand Forecasting</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Inventory Manager','Report Generator','Finance') %}
+          <a class="{{'active' if request.endpoint=='reports_v4' else ''}}" href="{{url_for('reports_v4')}}"><i>▤</i>Inventory Reports</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin','Inventory Manager','Requisition Officer','Finance','Report Generator') %}
+          <a class="{{'active' if request.endpoint=='client_reports' else ''}}" href="{{url_for('client_reports')}}"><i>⇩</i>Detailed Exports</a>
+          {% endif %}
+          {% if me.role in ('Super User','Admin') %}
+          <a class="{{'active' if request.endpoint=='users_page' else ''}}" href="{{url_for('users_page')}}"><i>⚙</i>Users & Activity</a>
+          <a class="{{'active' if request.endpoint=='lifecycle_page' else ''}}" href="{{url_for('lifecycle_page')}}"><i>◷</i>Asset Lifecycle</a>
+          {% endif %}
         </nav>
-
 
         <!-- INVENTORY CATEGORIES -->
 
-        <div class="catnav">
-
-            <span>INVENTORY CATEGORIES</span>
+        {% if me.role in ('Super User','Encoder','Admin','Inventory Manager') %}
+        <details class="catnav nav-categories">
+            <summary>Browse inventory categories <span aria-hidden="true">⌄</span></summary>
 
             {% for c in categories %}
 
@@ -131,9 +104,10 @@
 
             {% endfor %}
 
-        </div>
+        </details>
 
 
+        {% endif %}
         <div class="sidebar-foot">
 
             inharitense — CSC 0313.1<br>
@@ -166,7 +140,7 @@
 
                 <p>
                     {% block subtitle %}
-                    One workspace for inventory visibility, requests, purchasing, and demand planning.
+                    One workspace for centralized inventory, item assignments, reports, requisition preparation, and audit.
                     {% endblock %}
                 </p>
 
@@ -176,12 +150,14 @@
             <div class="top-actions">
 
                 <button
-                    class="icon-btn"
+                    class="icon-btn theme-toggle"
                     id="themeBtn"
-                    title="Toggle theme"
+                    title="Switch to dark mode"
+                    aria-label="Switch color theme"
                     type="button"
                 >
-                    ☼
+                    <span class="theme-sun">☀</span>
+                    <span class="theme-moon">☾</span>
                 </button>
 
 
@@ -204,9 +180,10 @@
 
                     <div>
                         <b>{{ me.name }}</b>
-                        <small>{{ role_labels[me.role] }}</small>
+                        <small>{{ role_labels.get(me.role, me.role) }}</small>
                     </div>
 
+                    <a href="{{ url_for('account_settings') }}">Settings</a>
                     <a href="{{ url_for('logout') }}">
                         Log out
                     </a>
@@ -273,7 +250,6 @@
 
     <div
         class="modal-card"
-        style="width:min(420px,100%);"
     >
 
         <div class="modal-head">
@@ -283,7 +259,6 @@
         <p
             id="confirmMessage"
             class="muted"
-            style="font-size:11px;"
         ></p>
 
         <div class="modal-actions">
@@ -315,7 +290,6 @@
 
     <div
         class="modal-card"
-        style="width:min(360px,100%);"
     >
 
         <div class="modal-head">
@@ -329,7 +303,6 @@
             type="number"
             min="1"
             value="1"
-            style="width:100%;min-height:42px;border:1px solid var(--line);border-radius:9px;padding:10px;"
         >
 
         <div class="modal-actions">
@@ -361,5 +334,7 @@
 
 {% block scripts %}{% endblock %}
 
+<script defer src="{{ url_for('static', filename='js/workspace-redesign.js') }}"></script>
+<script defer src="{{ url_for('static', filename='js/report-ui.js') }}"></script>
 </body>
 </html>

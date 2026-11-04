@@ -1,5 +1,61 @@
-{% extends 'base.html' %}{% block heading %}Stock Requests{% endblock %}{% block subtitle %}Department request → Purchasing review → HR final approval → fulfillment.{% endblock %}{% block content %}
-<div class="workflow"><div class="active"><b>01</b><span>Request<small>Department submits</small></span></div><i></i><div><b>02</b><span>Review<small>Purchasing checks</small></span></div><i></i><div><b>03</b><span>Approve<small>HR final decision</small></span></div><i></i><div><b>04</b><span>Fulfill<small>Stock is released</small></span></div></div>
-{% if me.role not in ['HR','Purchasing'] %}<div class="panel request-create"><div class="panel-head"><div><div class="eyebrow">NEW REQUEST</div><h3>Request an item</h3><small>Requests are routed to Purchasing first.</small></div></div><form class="inline-form" method="post" action="{{url_for('request_create')}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<label>Item<select name="inventory_id">{% for i in items %}<option value="{{i.id}}">{{i.name}} · {{i.qty}} {{i.unit}} on hand</option>{% endfor %}</select></label><label>Quantity<input name="quantity" type="number" min="1" value="1"></label><label>Purpose / note<input name="purpose" placeholder="e.g. workstation supplies"></label><button class="primary">Submit request</button></form></div>{% endif %}
-<div class="panel"><div class="panel-head"><div><div class="eyebrow">WORKFLOW INBOX</div><h3>{% if me.role=='Purchasing' %}Purchasing Review Inbox{% elif me.role=='HR' %}HR Final Approval Inbox{% else %}My Request Status{% endif %}</h3><small>{% if me.role=='Purchasing' %}Endorse requests to HR or reject them at first review.{% elif me.role=='HR' %}Approve, reject, note, or fulfill approved requests.{% else %}Track your request from review through fulfillment.{% endif %}</small></div><span class="pill">{{requests|length}} records</span></div><div class="request-list">{% for r in requests %}<div class="request"><div class="request-main"><div class="request-title"><b>{{r.request_no}}</b><span>{{r.status}}</span></div><h4>{{r.item_name}}</h4><small>{{r.quantity}} {{r.unit}} · requested by {{r.requester}} · {{r.created_at|dt}}</small><small>{{r.purpose or 'No purpose note'}}</small>{% if r.purchasing_note %}<div class="note-line"><b>Purchasing:</b> {{r.purchasing_note}}</div>{% endif %}{% if r.hr_note %}<div class="note-line"><b>HR:</b> {{r.hr_note}}</div>{% endif %}</div><div class="req-right"><span class="status {{r.status|lower|replace(' ','-')}}">{{r.status}}</span><div class="actions">{% if me.role=='Purchasing' and r.status=='For Review' %}<form method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="endorse"><button class="primary small">Endorse to HR</button></form><form method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="reject_purchasing"><button class="danger small">Reject</button></form>{% elif me.role=='HR' and r.status=='Forwarded to HR' %}<form method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="approve"><button class="primary small">Approve</button></form><form method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="reject_hr"><button class="danger small">Reject</button></form>{% elif me.role=='HR' and r.status=='Approved' %}<form method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="fulfill"><button class="primary small">Mark Fulfilled</button></form>{% endif %}{% if me.role in ['HR','Purchasing'] %}<form class="note-form" method="post" action="{{url_for('request_action',rid=r.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<input type="hidden" name="action" value="note"><input name="note" placeholder="Add note..."><button class="secondary small">Save note</button></form>{% endif %}</div></div></div>{% else %}<div class="empty">No requests yet.</div>{% endfor %}</div></div>
+{% extends 'base.html' %}
+{% block heading %}Stock Requests{% endblock %}
+{% block subtitle %}Employee request → Encoder review → Super User approval → Encoder release.{% endblock %}
+{% block content %}
+<div class="workflow">
+    <div class="active"><b>01</b><span>Request<small>Employee submits</small></span></div><i></i>
+    <div><b>02</b><span>Review<small>Encoder reviews</small></span></div><i></i>
+    <div><b>03</b><span>Approve<small>Super User approves</small></span></div><i></i>
+    <div><b>04</b><span>Release<small>Encoder releases stock</small></span></div>
+</div>
+{% if me.role=='Employee' %}
+<div class="panel request-create">
+    <div class="panel-head"><div><div class="eyebrow">NEW REQUEST</div><h3>Request an item</h3><small>Requests go to Encoder for review, then Super User for approval.</small></div></div>
+    <form class="inline-form" method="post" action="{{url_for('request_create')}}">
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+        <label>Item<select name="inventory_id" required>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} · {{i.name}}</option>{% endfor %}</select></label>
+        <label>Quantity<input name="quantity" type="number" min="1" value="1" required></label>
+        <label>Purpose / note<input name="purpose" placeholder="e.g. workstation supplies"></label>
+        <button class="primary">Submit request</button>
+    </form>
+</div>
+{% endif %}
+<div class="panel">
+    <div class="panel-head"><div>
+        <div class="eyebrow">WORKFLOW INBOX</div>
+        <h3>{% if me.role=='Encoder' %}Encoder Review & Release Inbox{% elif me.role=='Super User' %}Super User Approval Inbox{% else %}My Request Status{% endif %}</h3>
+        <small>{% if me.role=='Encoder' %}Review requests, endorse them to Super User, then release approved stock.{% elif me.role=='Super User' %}Review endorsed requests, approve or reject them, and monitor stock release.{% else %}Track your request from Encoder review through approval and release.{% endif %}</small>
+    </div><span class="pill">{{requests|length}} records</span></div>
+    <div class="request-list">
+    {% for r in requests %}
+        <div class="request">
+            <div class="request-main">
+                <div class="request-title"><b>{{r.request_no}}</b><span>{{r.status}}</span></div>
+                <h4>{{r.item_name}}</h4>
+                <small>{{r.quantity}} {{r.unit}} · requested by {{r.requester}} · {{r.created_at|dt}}</small>
+                <small>{{r.purpose or 'No purpose note'}}</small>
+                {% if r.purchasing_note %}<div class="note-line"><b>Review:</b> {{r.purchasing_note}}</div>{% endif %}
+                {% if r.hr_note %}<div class="note-line"><b>Super User:</b> {{r.hr_note}}</div>{% endif %}
+            </div>
+            <div class="req-right">
+                <span class="status {{r.status|lower|replace(' ','-')}}">{{r.status}}</span>
+                <div class="actions">
+                    {% if me.role in ('Encoder','Super User') and r.status=='For Review' %}
+                    <form method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="endorse"><button class="primary small">Endorse to Super User</button></form>
+                    <form method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="reject_purchasing"><button class="danger small">Reject</button></form>
+                    {% elif me.role=='Super User' and r.status=='For Super User Approval' %}
+                    <form method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="approve"><button class="primary small">Approve</button></form>
+                    <form method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="reject_hr"><button class="danger small">Reject</button></form>
+                    {% elif me.role in ('Encoder','Super User') and r.status=='Approved' %}
+                    <form method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="fulfill"><button class="primary small">Release stock</button></form>
+                    {% endif %}
+                    {% if me.role in ('Encoder','Super User') %}
+                    <form class="note-form" method="post" action="{{url_for('request_action',rid=r.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="action" value="note"><input name="note" placeholder="Add note..."><button class="secondary small">Save note</button></form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% else %}<div class="empty">No requests yet.</div>{% endfor %}
+    </div>
+</div>
 {% endblock %}

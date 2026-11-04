@@ -1,0 +1,16 @@
+{% extends 'base.html' %}
+{% block heading %}Account Settings{% endblock %}{% block subtitle %}Manage your own profile and sign-in details.{% endblock %}
+{% block content %}<div class="panel account-settings-panel">
+{% for error in errors %}<div class="flash error">{{error}}</div>{% endfor %}
+<form method="post" class="form-grid"><input type="hidden" name="_csrf" value="{{csrf_token()}}">
+<div class="span2"><h2>Your profile</h2><p class="muted">Your role and department are managed by the Super User.</p></div>
+<label>Full name<input name="name" value="{{values.name}}" minlength="2" maxlength="100" required autocomplete="name"></label>
+<label>Email / sign-in address<input type="email" name="email" value="{{values.email}}" maxlength="254" required autocomplete="email"></label>
+<label>Contact number (optional)<input name="phone" value="{{values.phone or ''}}" maxlength="40" autocomplete="tel"></label>
+<label>Role<input value="{{values.role}}" readonly></label><label>Department<input value="{{values.department or 'Not set'}}" readonly></label>
+<div class="span2"><h2>Change password</h2><p class="muted">Enter your current password to change your email or password. Leave new-password fields empty to keep your password.</p></div>
+<label>Current password<input type="password" name="current_password" autocomplete="current-password"></label>
+<label>New password<input type="password" name="new_password" minlength="10" maxlength="128" autocomplete="new-password"><small>10–128 characters, including a letter and a number.</small></label>
+<label>Confirm new password<input type="password" name="confirm_password" minlength="10" maxlength="128" autocomplete="new-password"></label>
+<div class="modal-actions span2"><a class="secondary" href="{{url_for('dashboard')}}">Back to dashboard</a><button class="primary">Save account settings</button></div>
+</form></div>{% endblock %}

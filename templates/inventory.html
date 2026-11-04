@@ -28,13 +28,14 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
     >
 
     <select id="cat">
-        <option value="">All allowed categories</option>
+        <option value="">All categories · {{ items|length }} items</option>
         {% for c in categories %}
-        <option value="{{ c }}" {{ 'selected' if c == selected_category else '' }}>{{ c }}</option>
+        <option value="{{ c }}" {{ 'selected' if c == selected_category else '' }}>{{ c }} · {{ category_counts.get(c, 0) }} items</option>
         {% endfor %}
     </select>
 
-    <button class="secondary" type="button" onclick="startScanner()">
+    {% if can_edit %}<button class="secondary" type="button" onclick="openMovementModal()">Stock movement</button>{% endif %}
+    <button class="secondary" type="button" onclick="openScanLookup()">
         ▣ Scan code
     </button>
 </div>
@@ -47,13 +48,14 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
             <small>Duplicate item numbers, names, and codes are blocked.</small>
         </div>
 
-        <div class="report-links">
+        {% if me.role=='Super User' %}<div class="report-links">
             <a href="{{ url_for('report', kind='stock') }}">CSV</a>
             <a href="{{ url_for('report_xlsx', kind='stock') }}">Excel</a>
             <a href="{{ url_for('report', kind='valuation') }}">Valuation</a>
         </div>
     </div>
 
+    {% endif %}
     <div class="table-wrap">
 
         <table id="inv">
@@ -130,7 +132,7 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
 
                             <button
                                 type="button"
-                                onclick="quickMove({{ i.id }}, 'out')"
+                                class="stock-out-btn" onclick="quickMove({{ i.id }}, 'out')"
                                 title="Stock OUT"
                             >
                                 −
@@ -138,7 +140,7 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
 
                             <button
                                 type="button"
-                                onclick="quickMove({{ i.id }}, 'in')"
+                                class="stock-in-btn" onclick="quickMove({{ i.id }}, 'in')"
                                 title="Stock IN"
                             >
                                 +
@@ -170,6 +172,7 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
                                 ✎
                             </button>
 
+                            {% if me.role=='Super User' %}
                             <button
                                 type="button"
                                 class="danger-icon"
@@ -179,6 +182,7 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
                                 ×
                             </button>
 
+                            {% endif %}
                             {% else %}
 
                             <span class="muted">Read only</span>
@@ -202,125 +206,29 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
 
 
 {% if can_edit %}
-
-<div class="grid two">
-
-    <div class="panel">
-
-        <div class="panel-head">
-            <div>
-                <h3>Stock movement</h3>
-                <small>
-                    Use exact quantities for receiving or issuing stock.
-                </small>
-            </div>
-        </div>
-
-        <form id="movementForm" class="movement-form">
-
-            {% if request.endpoint != "login" %}
-            <input
-                type="hidden"
-                name="_csrf"
-                value="{{ csrf_token() }}"
-            >
-            {% endif %}
-
-            <label>
-                Item
-
-                <select id="moveItem">
-
-                    {% for i in items %}
-                    <option value="{{ i.id }}" data-code="{{ i.item_no }}">
-                        {{ i.name }} · {{ i.qty }} {{ i.unit }}
-                    </option>
-                    {% endfor %}
-
-                </select>
-            </label>
-
-            <label>
-                Type
-
-                <select id="moveType">
-                    <option value="in">Stock IN</option>
-                    <option value="out">Stock OUT</option>
-                </select>
-            </label>
-
-            <label>
-                Quantity
-
-                <input
-                    id="moveQty"
-                    type="number"
-                    min="1"
-                    value="1"
-                >
-            </label>
-
-            <label>
-                Note
-
-                <input
-                    id="moveNote"
-                    type="text"
-                    placeholder="e.g. received delivery / issued to department"
-                >
-            </label>
-
-            <button
-                class="primary"
-                type="submit"
-            >
-                Record movement
-            </button>
-
-        </form>
-
-    </div>
-
-
-    <div class="panel">
-
-        <div class="panel-head">
-            <div>
-                <h3>Code scanner</h3>
-                <small>
-                    Find an item by its item number or registered QR/bar tag.
-                </small>
-            </div>
-        </div>
-
-        <div class="scan">
-
-            <input
-                id="scan"
-                type="text"
-                placeholder="ECMCI-PPE-001"
-            >
-
-            <button
-                class="secondary"
-                type="button"
-                onclick="scanItem()"
-            >
-                Find
-            </button>
-
-        </div>
-
-        <div id="scanResult" class="scan-result">
-            Camera scanning is available when the browser supports BarcodeDetector.
-        </div>
-
-    </div>
-
+<div id="stockMovementModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="stockMovementTitle">
+ <div class="modal-card">
+  <div class="modal-head"><div><div class="eyebrow">INVENTORY TRANSACTION</div><h2 id="stockMovementTitle">Stock movement</h2></div><button type="button" onclick="closeMovementModal()" aria-label="Close">×</button></div>
+  <div id="stockMovementContext" class="note"></div>
+  <form id="movementForm" class="movement-form">
+   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+   <label>Item<select id="moveItem" onchange="updateMovementContext()">{% for i in items %}<option value="{{i.id}}" data-category="{{i.category}}" data-name="{{i.name}}" data-qty="{{i.qty}}" data-unit="{{i.unit}}">{{i.item_no}} · {{i.name}}</option>{% endfor %}</select></label>
+   <label>Movement<select id="moveType" onchange="updateMovementContext()"><option value="in">Stock IN · received</option><option value="out">Stock OUT · issued</option></select></label>
+   <label>Quantity<input id="moveQty" type="number" min="1" step="1" value="1" required></label>
+   <label>Remarks (optional)<input id="moveNote" type="text" placeholder="Delivery, recipient, or reason"></label>
+   <div class="modal-actions"><button type="button" class="secondary" onclick="closeMovementModal()">Cancel</button><button class="primary" type="submit">Confirm movement</button></div>
+  </form>
+ </div>
 </div>
-
 {% endif %}
-
+<div id="scanLookupModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="scanLookupTitle">
+ <div class="modal-card scanner-card">
+  <div class="modal-head"><div><div class="eyebrow">FIND INVENTORY</div><h2 id="scanLookupTitle">Scan code</h2></div><button type="button" onclick="closeUiModal('scanLookupModal')" aria-label="Close">×</button></div>
+  <div class="scan"><input id="scan" type="text" placeholder="Enter or paste an item tag"><button class="secondary" type="button" onclick="scanItem()">Find item</button></div>
+  <div id="scanResult" class="scan-result">Enter an inventory tag, or scan with your camera.</div>
+  <div class="modal-actions"><button type="button" class="secondary" onclick="closeUiModal('scanLookupModal')">Cancel</button><button class="primary" type="button" onclick="closeUiModal('scanLookupModal');startScanner()">Open camera</button></div>
+ </div>
+</div>
 
 <div id="itemModal" class="modal">
 
@@ -354,11 +262,13 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
             {% endif %}
 
             <div class="form-hint span2">
-                Pick the category and unit first — the item number and code below will be
-                suggested automatically. You can still edit them if you need something different.
+                Pick the category, item name, and acquired date. New records use ECMCI tagging: Category-Description-Year Acquired-Number Series (example: OE-Laptop-2026-0001).
             </div>
 
-            <label>
+<details class="form-section span2" open><summary>Basic information<small>Essential details for identification and opening stock.</small></summary><div class="form-grid section-fields"><label class="span2">
+                Item name
+                <input name="name" type="text" required>
+            </label><label>
                 Category
                 <select name="category" id="fCategory" required onchange="suggestItemCode()">
                     <option value="" disabled selected>Choose a category…</option>
@@ -366,77 +276,58 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
                     <option value="{{ c }}">{{ c }}</option>
                     {% endfor %}
                 </select>
-            </label>
-
-            <label>
+            </label><label>
                 Unit
                 <input name="unit" id="fUnit" type="text" placeholder="e.g. box, piece, ream" onchange="suggestItemCode()">
-            </label>
-
-            <label>
-                Item number
-                <input name="item_no" id="fItemNo" type="text" required placeholder="Auto-suggested once category is set">
-            </label>
-
-            <label>
-                QR / bar tag / serial code <span class="optional-tag">(optional)</span>
-                <input name="code" id="fCode" type="text" placeholder="Auto-filled from item number">
-            </label>
-
-            <label class="span2">
-                Item name
-                <input name="name" type="text" required>
-            </label>
-
-            <label>
+            </label><label>
+                Date acquired
+                <input name="received_date" type="date">
+            </label><label>
                 Current stock
-                <input name="qty" type="number" min="0" value="0">
-            </label>
-
-            <label>
-                Unit cost (₱)
-                <input name="cost" type="number" step="0.01" min="0" value="0">
-            </label>
-
-            <label>
+                <input name="qty" type="number" min="0" value="0"><small>Opening stock for new items. Use Stock IN / OUT for later changes.</small>
+            </label></div></details>
+<details class="form-section span2" ><summary>Stock levels<small>Minimum, maximum, and unit cost.</small></summary><div class="form-grid section-fields"><label>
                 Minimum threshold
                 <input name="min_qty" type="number" min="0" value="0">
-            </label>
-
-            <label>
+            </label><label>
                 Maximum stock
                 <input name="max_qty" type="number" min="1" value="1">
-            </label>
-
-            <label>
+            </label><label>
+                Unit cost (₱)
+                <input name="cost" type="number" step="0.01" min="0" value="0">
+            </label></div></details>
+<details class="form-section span2" ><summary>Vendor & custody<small>Supplier and person or department responsible.</small></summary><div class="form-grid section-fields"><label>
                 Vendor
                 <input name="vendor" type="text">
-            </label>
-
-            <label>
+            </label><label>
                 Custodian
                 <input name="custodian" type="text">
-            </label>
-
-            <label>
+            </label></div></details>
+<details class="form-section span2" ><summary>Dates & status<small>Condition, useful life, expiry, and optional tags.</small></summary><div class="form-grid section-fields"><label>
                 Condition
                 <select name="condition">
                     <option value="Good">Good</option>
                     <option value="Damaged">Damaged</option>
                     <option value="For Disposal">For Disposal</option>
                 </select>
-            </label>
-
-            <label>
-                Received date
-                <input name="received_date" type="date">
-            </label>
-
-            <label class="span2">
+            </label><label>
+                Useful life (years) <span class="optional-tag">(assets only)</span>
+                <input name="useful_life_years" type="number" min="1" max="30" placeholder="e.g. 5">
+            </label><label>
+                Lifecycle status <span class="optional-tag">(assets only)</span>
+                <select name="lifecycle_status">
+                    <option value="">Auto / not set</option><option>Active</option><option>Approaching EOL</option><option>For Repair / Review</option><option>For Disposal</option><option>Past EOL</option>
+                </select>
+            </label><label class="span2">
                 Expiry <span class="optional-tag">(optional, if applicable)</span>
                 <input name="expiry" type="date">
-            </label>
-
+            </label><label>
+                Item number
+                <input name="item_no" id="fItemNo" type="text" placeholder="Auto-suggested once category is set">
+            </label><label>
+                QR / bar tag / serial code <span class="optional-tag">(optional)</span>
+                <input name="code" id="fCode" type="text" placeholder="Auto-filled from item number">
+            </label></div></details>
             <input
                 type="hidden"
                 name="id"
@@ -536,6 +427,107 @@ Centralized stock records with quantity, thresholds, vendor, custodian, and item
 <script>
     initInventoryFilter();
     initMovementForm();
+
+    function filterMovementItems() {
+        const categorySelect = document.getElementById('cat');
+        const moveItem = document.getElementById('moveItem');
+
+        if (!categorySelect || !moveItem) return;
+
+        const selectedCategory = categorySelect.value;
+
+        Array.from(moveItem.options).forEach(option => {
+            const itemCategory = option.dataset.category || '';
+
+            option.hidden =
+                selectedCategory !== '' &&
+                itemCategory !== selectedCategory;
+        });
+
+        const visibleOption = Array.from(moveItem.options)
+            .find(option => !option.hidden);
+
+        if (visibleOption) {
+            moveItem.value = visibleOption.value;
+        }
+    }
+
+    function applyInventoryCategory(category) {
+        const categoryFilter = document.getElementById('cat');
+        const cards = document.querySelectorAll(
+            '#inventoryCategoryCards .inventory-category-card'
+        );
+
+        if (!categoryFilter) return;
+
+        categoryFilter.value = category || '';
+
+        cards.forEach(card => {
+            card.classList.toggle(
+                'active',
+                (card.dataset.category || '') === categoryFilter.value
+            );
+        });
+
+        filterMovementItems();
+
+        const rows = document.querySelectorAll('#inv tbody tr');
+
+        rows.forEach(row => {
+            const rowCategory = row.dataset.cat || '';
+
+            row.hidden =
+                categoryFilter.value !== '' &&
+                rowCategory !== categoryFilter.value;
+        });
+
+        const params = new URLSearchParams(window.location.search);
+
+        if (categoryFilter.value) {
+            params.set('category', categoryFilter.value);
+        } else {
+            params.delete('category');
+        }
+
+        const query = params.toString();
+
+        history.replaceState(
+            null,
+            '',
+            window.location.pathname + (query ? '?' + query : '')
+        );
+    }
+
+    const categoryFilter = document.getElementById('cat');
+
+    if (categoryFilter) {
+        categoryFilter.addEventListener('change', () => {
+            applyInventoryCategory(categoryFilter.value);
+        });
+
+        const cards = document.querySelectorAll(
+            '#inventoryCategoryCards .inventory-category-card'
+        );
+
+        cards.forEach(card => {
+            card.addEventListener('click', () => {
+                applyInventoryCategory(card.dataset.category || '');
+            });
+        });
+
+        const initialCategory =
+            new URLSearchParams(window.location.search).get('category') || '';
+
+        if (
+            Array.from(categoryFilter.options).some(
+                option => option.value === initialCategory
+            )
+        ) {
+            categoryFilter.value = initialCategory;
+        }
+
+        applyInventoryCategory(categoryFilter.value);
+    }
 </script>
 
 {% endblock %}
