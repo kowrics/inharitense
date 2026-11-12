@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% block title %}Audit Trail{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}Audit Trail{% endblock %}
+{% block subtitle %}Restricted audit records and accountability for inventory changes.{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+    const toggle = document.getElementById('auditExportToggle');
+    const menu = document.getElementById('auditExportOptions');
+    if (!toggle || !menu) return;
+
+    const setOpen = (open) => {
+        toggle.setAttribute('aria-expanded', String(open));
+        menu.hidden = !open;
+    };
+    toggle.addEventListener('click', () => setOpen(toggle.getAttribute('aria-expanded') !== 'true'));
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.audit-export-menu')) setOpen(false);
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') setOpen(false);
+    });
+})();
+</script>
+{% endblock %}
+{% block content %}
+<section class="figma-surface audit-page-card">
+    <div class="figma-panel-head">
+        <div class="figma-panel-title"><span class="figma-iconbox">♜</span><div><div class="workspace-kicker">CONFIDENTIAL AUDIT</div><h2>Audit Trail</h2><p>Audit activity is read-only in this workspace and limited to authorized administrators.</p></div></div>
+        <div class="audit-export-menu"><button class="figma-action audit-export" type="button" id="auditExportToggle" aria-expanded="false" aria-controls="auditExportOptions">⇩ &nbsp; Export Movements <span aria-hidden="true">⌄</span></button><div class="audit-export-options" id="auditExportOptions" hidden><a href="{{url_for('report_xlsx',kind='movements')}}">Export to Excel (.xlsx)</a><a href="{{url_for('reports_pdf',kind='movements')}}">Export to PDF (.pdf)</a></div></div>
+    </div>
+    <div class="figma-table-shell"><table><thead><tr><th>Activity</th><th>Actor</th><th>Date &amp; Time</th></tr></thead><tbody>
+    {% for a in audits %}<tr><td><strong>{{a.action}}</strong>{% if a.item_no %}<small>Item: {{a.item_no}}</small>{% endif %}</td><td>{{a.user_name or 'System'}}<small>{{role_labels.get(a.role,a.role) if a.role else 'System'}}</small></td><td>{{a.created_at|dt}}</td></tr>{% else %}<tr><td colspan="3" class="empty">No audit activity has been recorded.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% endblock %}
+

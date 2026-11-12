@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+{% block title %}Inventory Import Preview{% endblock %}
+{% block eyebrow %}INVENTORY OPERATIONS{% endblock %}
+{% block heading %}Bulk Stock Import Preview{% endblock %}
+{% block subtitle %}Review every row before the system saves inventory records and opening stock movements.{% endblock %}
+{% block content %}
+<section class="figma-surface">
+    <div class="figma-panel-head">
+        <div class="figma-panel-title"><span class="figma-iconbox">⇧</span><div><h2>Import validation</h2><p>{{row_count}} spreadsheet rows · {{valid_rows|length}} valid · {{errors|length}} issue(s)</p></div></div>
+        <a class="secondary" href="{{url_for('inventory_page')}}">Back to inventory</a>
+    </div>
+    {% if errors %}
+    <div class="flash error" role="alert">Nothing has been imported. Correct the listed rows in your spreadsheet, then upload the file again.</div>
+    <div class="figma-table-shell"><table><thead><tr><th>Spreadsheet row</th><th>Issue</th></tr></thead><tbody>
+    {% for error in errors %}<tr><td>{{error.row_number}}</td><td>{{error.message}}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% else %}
+    <div class="flash success" role="status">All {{valid_rows|length}} rows passed validation. Review the preview before confirming.</div>
+    <div class="figma-table-shell"><table><thead><tr><th>Row</th><th>Inventory Tag</th><th>Item</th><th>Category</th><th>Opening Qty</th><th>Min / Max</th><th>Cost</th></tr></thead><tbody>
+    {% for row in valid_rows %}<tr><td>{{row.row_number}}</td><td>{{row.item_no or 'Auto-generated'}}</td><td><strong>{{row.name}}</strong><small>{{row.code or 'Code will use item tag'}}</small></td><td>{{row.category}}</td><td>{{row.qty}} {{row.unit}}</td><td>{{row.min_qty}} / {{row.max_qty}}</td><td>₱{{'%.2f'|format(row.cost)}}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="form-hint">Confirming will create each inventory record and its opening stock movement in one transaction. If a conflict is detected at confirmation time, the entire import is cancelled.</div>
+    <form method="post" action="{{url_for('inventory_import_confirm')}}" class="figma-form-actions">
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="batch_id" value="{{batch_id}}">
+        <a class="secondary" href="{{url_for('inventory_page')}}">Cancel</a><button class="primary" type="submit">Confirm Import ({{valid_rows|length}} records)</button>
+    </form>
+    {% endif %}
+</section>
+{% endblock %}

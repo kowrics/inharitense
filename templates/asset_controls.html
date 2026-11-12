@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% set control_view = view|default('adjustments') %}
+{% block title %}Approvals & Corrections{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}{{ 'Disposal Requests' if control_view == 'disposals' else 'Stock Corrections' }}{% endblock %}
+{% block subtitle %}{% if control_view == 'disposals' %}Review proposed asset disposals. Inventory quantities change only after Finance approval.{% else %}Review inventory quantity corrections from physical counts and authorized adjustment requests.{% endif %}{% endblock %}
+{% block content %}
+<div class="workspace-tabbed" data-workspace="asset-controls">
+    <div class="workspace-kicker">ASSET MANAGEMENT</div>
+    <nav class="figma-tabs server-tabs" aria-label="Asset control views">
+        <a class="figma-tab {{'is-active' if control_view=='adjustments' else ''}}" href="{{url_for('asset_controls_page',view='adjustments')}}">Stock Corrections</a>
+        <a class="figma-tab {{'is-active' if control_view=='disposals' else ''}}" href="{{url_for('asset_controls_page',view='disposals')}}">Disposal Requests</a>
+    </nav>
+
+    {% if control_view == 'disposals' %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▧</span><div><h2>Asset Disposal Requests</h2><p>Disposal requests require Finance approval before inventory quantities are reduced.</p></div></div>
+        {% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}<button class="figma-action" type="button" data-modal-open="disposalRequestDialog">＋ &nbsp; Request Disposal</button>{% endif %}</div>
+        <div class="figma-table-shell"><table><thead><tr><th>Reference</th><th>Item</th><th>Quantity</th><th>Reason</th><th>Status</th><th>Requested By</th><th>Decision</th></tr></thead><tbody>
+        {% for d in disposals %}<tr id="disposal-{{d.id}}"><td><strong>{{d.reference_no}}</strong></td><td>{{d.item_no}}<small>{{d.item_name}}</small></td><td>{{d.quantity}}</td><td>{{d.reason}}</td><td><span class="status-pill {{'pending' if d.status=='Pending Finance Approval' else 'completed' if d.status=='Approved' else 'rejected'}}">{{d.status}}</span></td><td>{{d.requester}}</td><td>
+            {% if d.status=='Pending Finance Approval' and me.role in ('Finance','Super User','Admin') %}<form method="post" action="{{url_for('disposal_decision',did=d.id)}}" class="decision-form"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input name="decision_note" placeholder="Decision note / rejection reason"><div><button name="decision" value="approve" class="primary small">Approve</button><button name="decision" value="reject" class="danger small">Reject</button></div></form>{% else %}<span>{{d.decision_maker or '—'}}</span>{% if d.decision_note %}<small>{{d.decision_note}}</small>{% endif %}{% endif %}
+        </td></tr>{% else %}<tr><td colspan="7" class="empty">No disposal requests have been recorded.</td></tr>{% endfor %}
+        </tbody></table></div>
+    </section>
+    {% else %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">⚖</span><div><h2>Inventory Correction Queue</h2><p>Review and manage inventory quantity corrections from audits and authorized requests</p></div></div>
+        {% if me.role in ('Super User','Admin','Encoder') %}<button class="figma-action" type="button" data-modal-open="adjustmentRequestDialog">＋ &nbsp; Add Adjustment</button>{% endif %}</div>
+        <div class="figma-table-shell"><table><thead><tr><th>Reference</th><th>Item</th><th>Recorded</th><th>Proposed</th><th>Reason</th><th>Status</th><th>Requested By</th><th>Decision</th></tr></thead><tbody>
+        {% for a in adjustments %}<tr id="adjustment-{{a.id}}"><td><strong>{{a.reference_no}}</strong></td><td>{{a.item_no}}<small>{{a.item_name}}</small></td><td>{{a.expected_qty}}</td><td>{{a.proposed_qty}}</td><td>{{a.reason}}</td><td><span class="status-pill {{'pending' if a.status=='Pending Manager Approval' else 'completed' if a.status=='Approved' else 'rejected'}}">{{a.status}}</span></td><td>{{a.requester}}</td><td>
+            {% if a.status=='Pending Manager Approval' and me.role in ('Inventory Manager','Super User','Admin') %}<form method="post" action="{{url_for('adjustment_decision',aid=a.id)}}" class="decision-form"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input name="decision_note" placeholder="Decision note / rejection reason"><div><button name="decision" value="approve" class="primary small">Approve</button><button name="decision" value="reject" class="danger small">Reject</button></div></form>{% else %}<span>{{a.decision_maker or '—'}}</span>{% if a.decision_note %}<small>{{a.decision_note}}</small>{% endif %}{% endif %}
+        </td></tr>{% else %}<tr><td colspan="8" class="empty">No stock adjustments have been requested.</td></tr>{% endfor %}
+        </tbody></table></div>
+        <p class="figma-footnote">Inventory balances are not changed when an adjustment is requested. An authorized Inventory Manager must approve the proposal first. Approved adjustments are recorded in the stock movement audit.</p>
+    </section>
+    {% endif %}
+</div>
+
+{% if me.role in ('Super User','Admin','Encoder') %}
+<dialog id="adjustmentRequestDialog" class="figma-dialog" data-ui-modal>
+    <form method="dialog" class="dialog-x"><button aria-label="Close" class="secondary" value="cancel">×</button></form>
+    <div class="figma-panel-title"><span class="figma-iconbox">＋</span><div><h2>Request Stock Adjustment</h2><p>Inventory Manager approval is required before the balance changes.</p></div></div>
+    <form method="post" action="{{url_for('adjustment_request')}}" class="figma-form-grid dialog-form" data-draft-form="stock-adjustment">
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+        <label class="full">Inventory item<select name="inventory_id" required><option value="">Choose inventory item</option>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} · {{i.name}} (Current: {{i.qty}})</option>{% endfor %}</select></label>
+        <label class="full">Proposed total quantity<input type="number" name="proposed_qty" min="0" required></label>
+        <label class="full">Reason<input name="reason" minlength="5" maxlength="1000" required placeholder="Explain the reason for this correction"></label>
+        <div class="figma-form-actions full"><button type="button" class="secondary" data-modal-close>Cancel</button><button class="primary" type="submit">Submit for Approval</button></div>
+    </form>
+</dialog>
+{% endif %}
+{% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+<dialog id="disposalRequestDialog" class="figma-dialog" data-ui-modal>
+    <form method="dialog" class="dialog-x"><button aria-label="Close" class="secondary" value="cancel">×</button></form>
+    <div class="figma-panel-title"><span class="figma-iconbox">▧</span><div><h2>Request Asset Disposal</h2><p>Stock remains unchanged until Finance approves the request.</p></div></div>
+    <form method="post" action="{{url_for('disposal_request')}}" class="figma-form-grid dialog-form" data-draft-form="asset-disposal">
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+        <label class="full">Inventory item<select name="inventory_id" required><option value="">Choose inventory item</option>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} · {{i.name}} ({{i.qty}} available)</option>{% endfor %}</select></label>
+        <label>Quantity<input type="number" name="quantity" min="1" required></label>
+        <label class="full">Reason<input name="reason" minlength="5" maxlength="1000" required></label>
+        <div class="figma-form-actions full"><button type="button" class="secondary" data-modal-close>Cancel</button><button class="primary" type="submit">Submit Disposal Request</button></div>
+    </form>
+</dialog>
+{% endif %}
+{% endblock %}

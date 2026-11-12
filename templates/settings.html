@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}Settings{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}Settings{% endblock %}
+{% block subtitle %}Manage your profile information and sign-in details.{% endblock %}
+{% block content %}
+<div class="settings-workspace">
+    <div class="settings-intro figma-surface"><div class="workspace-kicker">ACCOUNT PREFERENCES</div><h2>Account settings</h2><p>Keep your profile accurate and protect access with a strong password. Your account role and registered email are managed by an administrator.</p></div>
+    {% if must_change_password %}<div class="settings-required-banner" role="alert"><strong>Action required · First-time sign-in</strong><p>Your account requires a password update before you can continue. Please change your temporary password to access the system.</p><span>Other system modules remain locked until the new password is saved.</span></div>{% endif %}
+    {% for error in errors %}<div class="flash error" role="alert">{{error}}</div>{% endfor %}
+    <form method="post" class="settings-form" data-settings-form>
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+        <section class="figma-surface settings-card">
+            <div class="settings-section-kicker">PERSONAL INFORMATION</div><div class="figma-panel-title"><span class="figma-iconbox">♙</span><div><h2>Your Profile</h2><p>Update your display name and contact number</p></div></div>
+            <div class="figma-form-grid">
+                <label class="full">Name<input name="name" value="{{values.name}}" minlength="2" maxlength="100" required autocomplete="name"></label>
+                <label>Email<input type="email" name="email" value="{{values.email}}" maxlength="254" required autocomplete="email" readonly aria-readonly="true"><small>Your registered email cannot be changed here. Contact an administrator if it needs correction.</small></label>
+                <label>Contact Number<input name="phone" value="{{values.phone or ''}}" maxlength="40" autocomplete="tel"></label>
+                <label>System Role<input value="{{values.role}}" readonly></label>
+                <label>Department<input value="{{values.department or 'Not set'}}" readonly></label>
+            </div>
+            <div class="figma-form-actions"><button class="primary" type="submit" name="save_section" value="profile">Save Changes</button></div>
+        </section>
+        <section class="figma-surface settings-card password-settings-card">
+            <div class="settings-section-kicker">SECURITY</div><div class="figma-panel-title"><span class="figma-iconbox">▣</span><div><h2>Change Password</h2><p>Use a unique password that you do not reuse on other sites</p></div></div>
+            <div class="figma-form-grid">
+                <label class="full">Enter Current Password<div class="password-input-wrap"><input type="password" name="current_password" value="{{values.get('current_password', '')}}" autocomplete="current-password" data-current-password><button class="password-toggle" type="button" data-toggle-password aria-label="Show current password">Show</button></div></label>
+                <label>Enter New Password<div class="password-input-wrap"><input type="password" name="new_password" minlength="10" maxlength="128" autocomplete="new-password" data-new-password><button class="password-toggle" type="button" data-toggle-password aria-label="Show new password">Show</button></div><small>10–128 characters, including a letter and a number.</small></label>
+                <label>Confirm New Password<div class="password-input-wrap"><input type="password" name="confirm_password" minlength="10" maxlength="128" autocomplete="new-password" data-confirm-password><button class="password-toggle" type="button" data-toggle-password aria-label="Show confirmation password">Show</button></div></label>
+            </div>
+            <div class="figma-form-actions"><button class="primary" type="submit" name="save_section" value="password" data-password-submit>Update Password</button></div>
+        </section>
+    </form>
+</div>
+{% endblock %}

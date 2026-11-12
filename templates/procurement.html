@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block title %}Procurement & Receiving{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}Procurement & Receiving{% endblock %}
+{% block subtitle %}Work through each stage separately. Inventory is updated only after accepted delivery is recorded.{% endblock %}
+{% block content %}
+<div class="procurement-workspace">
+    <div class="workspace-kicker">PURCHASING WORKFLOW</div>
+    <p class="cl-note">Client workflow: requisition → manager approval → supplier purchase order → delivery verification → accepted units added to inventory. Rejected deliveries do not add stock.</p>
+    <nav class="figma-stage-tabs" aria-label="Procurement stages">
+        <a class="figma-stage-tab {{'is-active' if stage=='approvals' else ''}}" href="{{url_for('procurement_page',stage='approvals')}}"><span>01</span> Approvals</a>
+        <a class="figma-stage-tab {{'is-active' if stage=='orders' else ''}}" href="{{url_for('procurement_page',stage='orders')}}"><span>02</span> Create Order</a>
+        <a class="figma-stage-tab {{'is-active' if stage=='receiving' else ''}}" href="{{url_for('procurement_page',stage='receiving')}}"><span>03</span> Receiving</a>
+        <a class="figma-stage-tab {{'is-active' if stage=='history' else ''}}" href="{{url_for('procurement_page',stage='history')}}"><span>04</span> Receipt History</a>
+    </nav>
+
+    {% if stage == 'approvals' %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">✓</span><div><h2>Purchase Requisition Approvals</h2><p>Review purchase requests before a supplier order can be created</p></div></div><span class="status-pill">{{prs|selectattr('status','equalto','Pending Approval')|list|length}} pending</span></div>
+        <div class="figma-table-shell"><table><thead><tr><th>PR Reference</th><th>Description / Item</th><th>Quantity</th><th>Prepared By</th><th>Status</th><th>Decision / Next Step</th></tr></thead><tbody>
+        {% for r in prs %}<tr id="requisition-{{r.id}}"><td><strong>{{r.pr_no}}</strong><small>{{r.created_at|dt}}</small></td><td>{{r.item_name or r.description}}<small>{{r.item_no or 'Unlinked inventory item'}}{% if r.item_name %} · {{r.description}}{% endif %}</small></td><td>{{r.quantity}}</td><td>{{r.preparer or '—'}}</td><td><span class="status-pill {{'pending' if r.status=='Pending Approval' else 'completed' if r.status in ('Approved','Ordered','Received') else 'rejected'}}">{{r.status}}</span></td><td>
+            {% if r.status == 'Pending Approval' and me.role in ('Super User','Admin','Inventory Manager') %}
+            <form method="post" action="{{url_for('procurement_pr_decision',pid=r.id)}}" class="cl-actions"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><input name="note" placeholder="Approval / rejection note" aria-label="Approval or rejection note"><button name="decision" value="approve" class="primary small">Approve</button><button name="decision" value="reject" class="danger small">Reject</button></form>
+            {% elif r.status == 'Approved' %}<a class="secondary small" href="{{url_for('procurement_page',stage='orders')}}">Ready for order</a>{% else %}{{r.approval_note or '—'}}{% endif %}
+        </td></tr>{% else %}<tr><td colspan="6" class="empty">No requisitions found. Prepare one from Purchase Requisitions.</td></tr>{% endfor %}
+        </tbody></table></div>
+    </section>
+    {% elif stage == 'orders' %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▣</span><div><h2>Create Purchase Order</h2><p>Convert an approved requisition into a supplier order</p></div></div></div>
+        {% if me.role in ('Super User','Admin','Requisition Officer') %}
+        <form method="post" action="{{url_for('procurement_create_order')}}" class="figma-form-grid" data-draft-form="purchase-order">
+            <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+            <fieldset class="pr-selection-field full"><legend>Approved requisition</legend><div class="pr-selection-grid">{% for r in prs if r.status=='Approved' and r.inventory_id %}<label class="pr-choice"><input type="radio" name="requisition_id" value="{{r.id}}" required><span class="pr-choice-body"><strong>{{r.pr_no}}</strong><span>{{r.item_name or r.description}}</span><small>{{r.item_no}} · {{r.quantity}} units{% if r.needed_by %} · Needed by {{r.needed_by}}{% endif %}</small></span><span class="pr-choice-status">Approved</span></label>{% else %}<p class="empty">No approved requisitions are ready for a purchase order.</p>{% endfor %}</div></fieldset>
+            <label>Supplier<select name="vendor_id" required><option value="">Select supplier</option>{% for v in vendors %}<option value="{{v.id}}">{{v.name}}</option>{% endfor %}</select></label>
+            <label>Unit Cost (PHP)<input name="unit_cost" type="number" step="0.01" min="0" placeholder="0.00" required></label>
+            <label class="full">Notes / Terms<input name="notes" maxlength="1000" placeholder="Purchase order reference, delivery terms, or supplier notes"></label>
+            <div class="figma-form-actions full"><a class="secondary" href="{{url_for('procurement_page',stage='approvals')}}">Back to approvals</a><button class="primary">Create Purchase Order</button></div>
+        </form>
+        {% else %}<div class="note">Your role can review procurement progress but cannot issue a purchase order.</div>{% endif %}
+        <div class="section-head" style="margin-top:28px"><div><h3>Approved Requisition Register</h3><p>Approved requisitions remain visible as they progress through ordering and receiving.</p></div></div>
+        <div class="figma-table-shell"><table><thead><tr><th>PR</th><th>Product / Description</th><th>Qty</th><th>Needed By</th><th>Purchase Order</th><th>Latest Status</th></tr></thead><tbody>{% for r in prs if r.status in ('Approved','Ordered','Partially Received','Received') %}<tr id="requisition-{{r.id}}"><td>{{r.pr_no}}</td><td>{{r.item_name or r.description}}<small>{{r.item_no or 'No linked inventory item'}}</small></td><td>{{r.quantity}}</td><td>{{r.needed_by or '—'}}</td><td>{{r.po_no or 'Not yet created'}}</td><td><span class="status-pill {{'completed' if r.status=='Approved' else 'pending' if r.status in ('Ordered','Partially Received') else 'completed'}}">{{r.status}}</span></td></tr>{% else %}<tr><td colspan="6" class="empty">No approved requisitions have been recorded yet.</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+    {% elif stage == 'receiving' %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">⇩</span><div><h2>Delivery Verification & Receiving</h2><p>Record delivered, accepted, and rejected units. Only accepted units update stock.</p></div></div><span class="status-pill">{{orders|selectattr('status','in',['Ordered','Partially Received'])|list|length}} open orders</span></div>
+        <div class="figma-table-shell"><table><thead><tr><th>Purchase Order</th><th>PR / Inventory Item</th><th>Supplier</th><th>Ordered</th><th>Received</th><th>Status</th><th>Record Delivery</th></tr></thead><tbody>
+        {% for o in orders %}<tr><td><strong>{{o.po_no}}</strong><small>₱{{'%.2f'|format(o.unit_cost)}} / unit</small></td><td>{{o.pr_no}}<small>{{o.item_name or o.description}}{% if o.item_name %} · {{o.description}}{% endif %}</small></td><td>{{o.vendor_name}}</td><td>{{o.requested_quantity}}</td><td>{{o.received_qty}}</td><td><span class="status-pill {{'pending' if o.status in ('Ordered','Partially Received') else 'completed'}}">{{o.status}}</span></td><td>
+            {% if o.status in ('Ordered','Partially Received') and me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+            <form method="post" action="{{url_for('procurement_receive',oid=o.id)}}" class="receive-form" data-draft-form="purchase-receive-{{o.id}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><div class="receive-fields"><label>Delivered<input name="delivered_qty" type="number" min="1" max="{{o.requested_quantity-o.received_qty}}" required></label><label>Accepted<input name="accepted_qty" type="number" min="0" max="{{o.requested_quantity-o.received_qty}}" required></label><label class="receive-notes">Condition / Rejected Notes<input name="condition_notes" placeholder="Required when any units are rejected"></label></div><div class="figma-form-actions receive-actions"><button class="primary small" type="submit">Verify &amp; Receive</button></div></form>
+            {% else %}—{% endif %}
+        </td></tr>{% else %}<tr><td colspan="7" class="empty">No purchase orders have been created.</td></tr>{% endfor %}
+        </tbody></table></div>
+    </section>
+    {% else %}
+    <section class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▤</span><div><h2>Delivery Receipt History</h2><p>Accepted and rejected quantities from verified deliveries</p></div></div><span class="status-pill">{{receipts|length}} receipts</span></div>
+        <div class="figma-table-shell"><table><thead><tr><th>Receipt Reference</th><th>Purchase Order</th><th>Delivered</th><th>Accepted</th><th>Rejected</th><th>Received At</th><th>Condition Notes</th></tr></thead><tbody>{% for r in receipts %}<tr><td><strong>{{r.receipt_no}}</strong></td><td>{{r.po_no}}</td><td>{{r.quantity}}</td><td>{{r.accepted_qty}}</td><td>{{r.rejected_qty}}</td><td>{{r.received_at|dt}}</td><td>{{r.condition_notes or '—'}}</td></tr>{% else %}<tr><td colspan="7" class="empty">No delivery receipts have been recorded.</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+    {% endif %}
+</div>
+{% endblock %}

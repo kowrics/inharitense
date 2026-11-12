@@ -1,11 +1,97 @@
-{% extends 'base.html' %}{% block heading %}Inventory Dashboard{% endblock %}{% block content %}
-<section class="hero"><div><span class="hero-label">INHARITENSE · OPERATIONS CONTROL</span><h2>Know what is available.<br><em>Act before it runs out.</em></h2><p>Live stock visibility across PPE, safety, office operations, IT/BPO equipment, and facility supplies.</p></div><div class="hero-actions"><a class="primary" href="{{url_for('inventory_page')}}">+ Manage stock</a><a class="secondary" href="{{url_for('requests_page')}}">View requests</a></div></section>
-<div class="kpis"><div><small>TRACKED ITEMS</small><b>{{data.total_items}}</b><span>{{data.categories}} categories</span></div><div><small>INVENTORY VALUE</small><b>₱{{'{:,.0f}'.format(data.value)}}</b><span>qty × unit cost</span></div><div class="warn"><small>REORDER SOON</small><b>{{data.low}}</b><span>at / below minimum</span></div><div><small>PENDING ACTIONS</small><b>{{data.pending}}</b><span>needs your role's action</span></div></div>
-<div class="section-head"><div><div class="eyebrow">LIVE ANALYTICS</div><h2>Inventory at a glance</h2><p>Charts update automatically when stock changes.</p></div><div class="updated"><span class="live-dot"></span><b>Live</b> · <span id="lastUpdate">now</span></div></div>
-<div class="grid two"><div class="panel chart-panel"><div class="panel-head"><div><h3>Stock level by category</h3><small>On hand compared with minimum threshold</small></div><span class="legend"><i class="g"></i>On hand <i class="y"></i>Minimum</span></div><canvas id="categoryChart"></canvas></div><div class="panel health-panel"><div class="panel-head"><div><h3>Inventory health</h3><small>Current stock condition</small></div></div><div class="health"><div class="donut-wrap"><canvas id="healthChart"></canvas><div class="donut-center"><b id="healthPct">0%</b><small>healthy stock</small></div></div><div class="health-list"><div><i class="g"></i>Healthy <b id="hHealthy">0</b></div><div><i class="y"></i>Reorder soon <b id="hReorder">0</b></div><div><i class="r"></i>Out of stock <b id="hOut">0</b></div></div></div></div></div>
-<div class="grid two lower"><div class="panel chart-panel movement-panel"><div class="panel-head"><div><h3>Stock movement activity</h3><small>Real Stock IN / OUT transactions from the database</small></div><span class="pill"><span class="live-dot"></span> Updates live</span></div><canvas id="movementChart"></canvas></div><div class="panel activity-panel"><div class="panel-head"><div><h3>Live activity</h3><small>Latest inventory events</small></div><span id="movementCount" class="count-pill">0 movements</span></div><div id="activity" class="activity"></div></div></div>
-<div class="section-head compact"><div><div class="eyebrow">MANAGEMENT OVERVIEW</div><h2>What management should see immediately</h2></div><div class="report-links"><a href="{{url_for('report',kind='stock')}}">CSV</a><a href="{{url_for('report_xlsx',kind='stock')}}">Excel</a></div></div>
-<div class="management-grid"><div class="management-card"><small>TOTAL INVENTORY VALUE</small><b>₱{{'{:,.0f}'.format(data.value)}}</b><span>current on-hand × unit cost</span></div><div class="management-card warn"><small>OUT-OF-STOCK ITEMS</small><b>{{data.out}}</b><span>zero on-hand right now</span></div><div class="management-card warn"><small>CRITICAL LOW-STOCK</small><b>{{data.low}}</b><span>at or below minimum</span></div><div class="management-card"><small>PENDING REQUESTS</small><b>{{data.pending_all}}</b><span>across the request workflow</span></div><div class="management-card"><small>EXPIRING SOON</small><b>{{data.expiring}}</b><span>within 30 days</span></div><div class="management-card"><small>DATA CONFLICTS</small><b>0</b><span>duplicate item records blocked</span></div></div>
-<div class="workflow"><div class="active"><b>01</b><span>Request<small>Department submits</small></span></div><i></i><div><b>02</b><span>Review<small>Purchasing checks</small></span></div><i></i><div><b>03</b><span>Approve<small>HR final decision</small></span></div><i></i><div><b>04</b><span>Fulfill<small>Stock is released</small></span></div></div>
-<div class="section-head compact"><div><div class="eyebrow">INVENTORY BY CATEGORY</div><h2>Five operational categories</h2></div></div><div class="category-cards">{% for c in data.category_levels %}<div><small>{{c.category}}</small><b>{{c.qty}}</b><span>on hand · {{c.min}} minimum</span><div class="mini-bar"><i style="width:{{[100,(c.qty/(c.min or 1)*50)]|min}}%"></i></div></div>{% endfor %}</div>
-{% endblock %}{% block scripts %}<script>window.DASH={{data|tojson}};initDashboard();</script>{% endblock %}
+{% extends 'base.html' %}
+{% block heading %}Good morning, {{ me.name.split()[0] }}{% endblock %}
+{% block subtitle %}Here’s what’s happening with your inventory today.{% endblock %}
+{% block content %}
+
+<div class="dashboard-kpis">
+    <a class="metric-card" href="{{ url_for('inventory_page' if me.role in ('Super User','Encoder') else 'reports_v4' if me.role=='Report Generator' else 'requests_page') }}">
+        <span class="metric-icon green">▣</span>
+        <span><small>Total Items</small><b>{{ data.total_items }}</b><em>{{ data.categories }} categories</em></span>
+    </a>
+    <a class="metric-card" href="{{ url_for('inventory_page' if me.role in ('Super User','Encoder') else 'reports_v4' if me.role=='Report Generator' else 'requests_page') }}">
+        <span class="metric-icon amber">△</span>
+        <span><small>Low Stock</small><b>{{ data.low }}</b><em>Items need attention</em></span>
+    </a>
+    <a class="metric-card" href="{{ url_for('assignments_page' if me.role in ('Super User','Encoder','Employee') else 'inventory_page' if me.role=='Encoder' else 'reports_v4') }}">
+        <span class="metric-icon blue">▤</span>
+        <span><small>Pending Actions</small><b>{{ data.pending }}</b><em>Awaiting your role</em></span>
+    </a>
+    {% if me.role in ('Super User','Encoder','Report Generator') %}
+    <a class="metric-card" href="{{ url_for('requisitions_page' if me.role in ('Super User','Encoder') else 'inventory_page' if me.role=='Encoder' else 'reports_v4') }}">
+        <span class="metric-icon mint">↗</span>
+        <span><small>Pending Requisitions</small><b>{{ data.pending_all }}</b><em>For processing</em></span>
+    </a>
+    {% else %}
+    <a class="metric-card" href="{{ url_for('assignments_page' if me.role in ('Super User','Encoder','Employee') else 'inventory_page' if me.role=='Encoder' else 'reports_v4') }}">
+        <span class="metric-icon mint">✓</span>
+        <span><small>My Items</small><b>View</b><em>Assigned inventory</em></span>
+    </a>
+    {% endif %}
+</div>
+
+<div class="dashboard-grid dashboard-primary">
+    <section class="panel dashboard-panel overview-panel">
+        <div class="panel-head">
+            <div><h3>Inventory Overview</h3><small>On-hand stock compared with minimum levels</small></div>
+            <span class="live-chip"><i></i> Live</span>
+        </div>
+        <div class="chart-tall"><canvas id="categoryChart"></canvas></div>
+    </section>
+
+    <section class="panel dashboard-panel condition-panel">
+        <div class="panel-head"><div><h3>Item Condition</h3><small>Current inventory health</small></div></div>
+        <div class="health modern-health">
+            <div class="donut-wrap"><canvas id="healthChart"></canvas><div class="donut-center"><b id="healthPct">0%</b><small>healthy</small></div></div>
+            <div class="health-list">
+                <div><i class="g"></i>Healthy <b id="hHealthy">0</b></div>
+                <div><i class="y"></i>Low stock <b id="hReorder">0</b></div>
+                <div><i class="r"></i>Out of stock <b id="hOut">0</b></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel dashboard-panel activity-panel dashboard-activity">
+        <div class="panel-head"><div><h3>Recent Activity</h3><small>Latest inventory events</small></div><span id="movementCount" class="count-pill">0 movements</span></div>
+        <div id="activity" class="activity"></div>
+    </section>
+</div>
+
+<div class="dashboard-grid dashboard-secondary">
+    <section class="panel dashboard-panel movement-panel">
+        <div class="panel-head"><div><h3>Inventory Movement</h3><small>Stock IN and OUT activity</small></div><span class="muted">Updated <span id="lastUpdate">now</span></span></div>
+        <div class="chart-medium"><canvas id="movementChart"></canvas></div>
+    </section>
+
+    <section class="panel dashboard-panel attention-panel">
+        <div class="panel-head"><div><h3>Items Requiring Attention</h3><small>Low and out-of-stock inventory</small></div><a href="{{ url_for('inventory_page' if me.role in ('Super User','Encoder') else 'reports_v4' if me.role=='Report Generator' else 'requests_page') }}">View all</a></div>
+        <div class="attention-list">
+            {% set ns = namespace(shown=0) %}
+            {% for c in data.category_levels %}
+                {% if c.qty <= c.min and ns.shown < 6 %}
+                <div class="attention-row">
+                    <span><b>{{ c.category }}</b><small>Category stock level</small></span>
+                    <strong>{{ c.qty }} / {{ c.min }}</strong>
+                    <em class="status {{ 'low' if c.qty else 'out' }}">{{ 'Low Stock' if c.qty else 'Out' }}</em>
+                </div>
+                {% set ns.shown = ns.shown + 1 %}
+                {% endif %}
+            {% endfor %}
+            {% if ns.shown == 0 %}<div class="empty">Everything is above its minimum stock level.</div>{% endif %}
+        </div>
+    </section>
+</div>
+
+<div class="quick-actions panel">
+    <div><div class="eyebrow">QUICK ACTIONS</div><h3>What do you need to do?</h3></div>
+    <div class="quick-action-links">
+        <a href="{{ url_for('inventory_page' if me.role in ('Super User','Encoder') else 'reports_v4' if me.role=='Report Generator' else 'requests_page') }}">▦ Manage Inventory</a>
+        <a href="{{ url_for('assignments_page' if me.role in ('Super User','Encoder','Employee') else 'inventory_page' if me.role=='Encoder' else 'reports_v4') }}">✓ Assignments</a>
+        {% if me.role in ('Super User','Encoder','Report Generator') %}
+        <a href="{{ url_for('reports_v4' if me.role in ('Super User','Report Generator') else 'inventory_page') }}">▤ Generate Report</a>
+        <a href="{{ url_for('inventory_audit_page' if me.role in ('Super User','Encoder') else 'reports_v4') }}">◎ Inventory Audit</a>
+        {% endif %}
+    </div>
+</div>
+
+{% endblock %}
+{% block scripts %}<script>window.DASH={{ data|tojson }};initDashboard();</script>{% endblock %}

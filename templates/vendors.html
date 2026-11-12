@@ -1,1 +1,329 @@
-{% extends 'base.html' %}{% block heading %}Vendors & Purchasing{% endblock %}{% block subtitle %}Confidential procurement workspace for Purchasing / Procurement.{% endblock %}{% block content %}<div class="page-toolbar"><div><div class="eyebrow">CONFIDENTIAL PROCUREMENT</div><h2>Vendor masterlist</h2><p>Maintain approved vendors by supply category.</p></div></div><div class="grid two"><div class="panel table-panel"><div class="panel-head"><div><h3>Approved vendors</h3><small>Purchasing-only visibility.</small></div></div><div class="table-wrap"><table><thead><tr><th>Vendor</th><th>Category</th><th>Supplies</th><th>Contact</th><th>Status</th></tr></thead><tbody>{% for v in vendors %}<tr><td><b>{{v.name}}</b></td><td>{{v.category}}</td><td>{{v.supplies}}</td><td>{{v.contact or '—'}}<small>{{v.email or ''}}</small></td><td><span class="status {{'ok' if v.status=='Active' else 'low'}}">{{v.status}}</span></td></tr>{% endfor %}</tbody></table></div></div><div class="panel"><div class="eyebrow">MASTERLIST ENTRY</div><h3>Add vendor</h3><form class="form-grid" method="post" action="{{url_for('vendor_save')}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<label>Vendor name<input name="name" required></label><label>Category<select name="category">{% for c in categories %}<option>{{c}}</option>{% endfor %}</select></label><label>Supplies<input name="supplies" placeholder="What this vendor provides"></label><label>Status<select name="status"><option>Active</option><option>Inactive</option></select></label><label>Contact<input name="contact"></label><label>Email<input name="email" type="email"></label><button class="primary wide span2">Save vendor</button></form><div class="note"><b>Confidential.</b> Vendor and purchasing information is visible only to authorized Purchasing / Procurement users.</div></div></div>{% endblock %}
+{% extends 'base.html' %}
+
+{% block heading %}
+    Vendors & Purchasing
+{% endblock %}
+
+{% block subtitle %}
+    Confidential procurement workspace for Purchasing / Procurement.
+{% endblock %}
+
+{% block content %}
+
+<div class="page-toolbar">
+    <div>
+        <div class="eyebrow">CONFIDENTIAL PROCUREMENT</div>
+        <h2>Vendor masterlist</h2>
+        <p>Maintain approved vendors by supply category.</p>
+    </div>
+</div>
+
+<div class="vendor-layout">
+
+    <div class="panel vendor-list-panel">
+
+        <div class="panel-head vendor-list-head">
+            <div>
+                <h3>Approved vendors</h3>
+                <small>{{ vendors|length }} vendor{{ '' if vendors|length == 1 else 's' }} in the masterlist.</small>
+            </div>
+
+            <div class="vendor-list-meta">
+                <span class="vendor-live-dot"></span>
+                Purchasing only
+            </div>
+        </div>
+
+        <div class="vendor-table-wrap">
+            <table class="vendor-table">
+                <thead>
+                    <tr>
+                        <th>VENDOR</th>
+                        <th>CATEGORY</th>
+                        <th>SUPPLIES</th>
+                        <th>CONTACT</th>
+                        <th>STATUS</th>
+                        <th>ACTIONS</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for v in vendors %}
+                    <tr>
+                        <td>
+                            <div class="vendor-name-cell">
+                                <span class="vendor-avatar">{{ v.name[:1]|upper }}</span>
+                                <div>
+                                    <b>{{ v.name }}</b>
+                                    <small>Vendor #{{ v.id }}</small>
+                                </div>
+                            </div>
+                        </td>
+
+                        <td>
+                            <span class="vendor-category-pill">
+                                {{ v.category or 'Uncategorized' }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <span class="vendor-supplies">
+                                {{ v.supplies or '—' }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div class="vendor-contact-cell">
+                                <b>{{ v.contact or '—' }}</b>
+                                {% if v.email %}
+                                    <a href="mailto:{{ v.email }}">{{ v.email }}</a>
+                                {% endif %}
+                            </div>
+                        </td>
+
+                        <td>
+                            <span class="status {{ 'ok' if v.status == 'Active' else 'low' }}">
+                                {{ v.status }}
+                            </span>
+                        </td>
+
+                        <td>
+                            <div class="vendor-actions">
+                                <button
+                                    type="button"
+                                    class="secondary small vendor-edit-btn"
+                                    data-id="{{ v.id }}"
+                                    data-name="{{ v.name|e }}"
+                                    data-category="{{ v.category|e }}"
+                                    data-supplies="{{ (v.supplies or '')|e }}"
+                                    data-status="{{ v.status|e }}"
+                                    data-contact="{{ (v.contact or '')|e }}"
+                                    data-email="{{ (v.email or '')|e }}"
+                                >
+                                    Edit
+                                </button>
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for('vendor_delete', vid=v.id) }}"
+                                    class="vendor-delete-form"
+                                >
+                                    <input
+                                        type="hidden"
+                                        name="_csrf"
+                                        value="{{ csrf_token() }}"
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        class="danger small"
+                                    >
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6">
+                            <div class="vendor-empty">
+                                <strong>No vendors yet.</strong>
+                                <span>Add your first approved vendor using the form.</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+
+    <div class="panel vendor-entry-panel">
+
+        <div class="eyebrow">MASTERLIST ENTRY</div>
+        <h3>Add vendor</h3>
+        <p class="vendor-form-intro">Add an approved supplier to the confidential purchasing masterlist.</p>
+
+        <form
+            class="form-grid vendor-form"
+            method="post"
+            action="{{ url_for('vendor_save') }}"
+        >
+
+            <input
+                type="hidden"
+                name="_csrf"
+                value="{{ csrf_token() }}"
+            >
+
+            <label>
+                Vendor name
+                <input name="name" required placeholder="e.g. CleanPro Solutions">
+            </label>
+
+            <label>
+                Category
+                <select name="category"><option value="" disabled selected>Choose a category</option>
+                    {% for c in categories %}
+                        <option>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="span2">
+                Supplies
+                <input name="supplies" placeholder="What this vendor provides">
+            </label>
+
+            <label>
+                Contact
+                <input name="contact" placeholder="Contact number or person">
+            </label>
+
+            <label>
+                Email
+                <input name="email" type="email" placeholder="vendor@email.com">
+            </label>
+
+            <label>
+                Status
+                <select name="status">
+                    <option>Active</option>
+                    <option>Inactive</option>
+                </select>
+            </label>
+
+            <button class="primary wide span2" type="submit">
+                + Save vendor
+            </button>
+
+        </form>
+
+        <div class="vendor-security-note">
+            <b>Confidential procurement data</b>
+            <span>Vendor and purchasing information is visible only to authorized Purchasing / Procurement users.</span>
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- =========================================================
+     EDIT VENDOR MODAL
+     ========================================================= -->
+
+<div
+    id="vendorEditModal"
+    class="vendor-modal"
+    aria-hidden="true"
+>
+
+    <div class="vendor-modal-backdrop" data-close-vendor-modal></div>
+
+    <div
+        class="vendor-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="vendorEditTitle"
+    >
+
+        <div class="vendor-modal-head">
+            <div>
+                <div class="eyebrow">MASTERLIST UPDATE</div>
+                <h3 id="vendorEditTitle">Edit vendor</h3>
+                <p>Update supplier details without leaving the purchasing workspace.</p>
+            </div>
+
+            <button
+                type="button"
+                class="icon-btn"
+                data-close-vendor-modal
+                aria-label="Close edit vendor dialog"
+            >
+                ×
+            </button>
+        </div>
+
+        <form
+            id="vendorEditForm"
+            class="form-grid vendor-form"
+            method="post"
+        >
+
+            <input
+                type="hidden"
+                name="_csrf"
+                value="{{ csrf_token() }}"
+            >
+
+            <label>
+                Vendor name
+                <input id="vendorEditName" name="name" required>
+            </label>
+
+            <label>
+                Category
+                <select id="vendorEditCategory" name="category">
+                    {% for c in categories %}
+                        <option>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+
+            <label class="span2">
+                Supplies
+                <input id="vendorEditSupplies" name="supplies">
+            </label>
+
+            <label>
+                Contact
+                <input id="vendorEditContact" name="contact">
+            </label>
+
+            <label>
+                Email
+                <input id="vendorEditEmail" name="email" type="email">
+            </label>
+
+            <label>
+                Status
+                <select id="vendorEditStatus" name="status">
+                    <option>Active</option>
+                    <option>Inactive</option>
+                </select>
+            </label>
+
+            <div class="vendor-modal-actions span2">
+                <button
+                    type="button"
+                    class="secondary"
+                    data-close-vendor-modal
+                >
+                    Cancel
+                </button>
+
+                <button
+                    type="submit"
+                    class="primary"
+                >
+                    Save changes
+                </button>
+            </div>
+
+        </form>
+
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    initVendors();
+</script>
+{% endblock %}

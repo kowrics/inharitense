@@ -4,362 +4,124 @@
     <meta charset="utf-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width,initial-scale=1">
-
-    <title>{% block title %}INHARITENSE{% endblock %} · ECMCI</title>
-
+    <meta name="theme-color" content="#edf3e8">
+    <title>{% block title %}ECMCI Inventory{% endblock %} · ECMCI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-
-    <link
-        href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
-        rel="stylesheet"
-    >
-
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-
-    <link
-        rel="stylesheet"
-        href="{{ url_for('static', filename='css/app.css') }}"
-    >
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inder&display=swap" rel="stylesheet">
+    <script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/jsQR.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/workspace-redesign.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/figma-ui.css') }}">
 </head>
-
-<body>
-
-<div class="app">
-
-    <aside class="sidebar">
-
-        <div class="brand">
-            <b>EC</b>
-
-            <div>
-                <strong>ECMCI Inventory</strong>
-                <small>inharitense · healthcare BPO</small>
-            </div>
+<body data-account-id="{{me.id}}" data-session-timeout-ms="1800000" data-session-warning-ms="120000" data-session-keepalive-url="{{url_for('session_keepalive')}}">
+<div class="app figma-app">
+    <button class="nav-scrim" id="navScrim" type="button" aria-label="Close navigation" hidden></button>
+    <aside class="sidebar figma-drawer" id="appNav" aria-label="Application navigation" aria-hidden="true" inert>
+        <div class="drawer-head">
+            <div class="brand"><b>EC</b><div><strong>ECMCI Inventory</strong><small>Integrated Inventory Management</small></div></div>
+            <button class="drawer-close" type="button" id="navClose" aria-label="Close menu">×</button>
         </div>
-
-
-        <nav>
-
-            <span>WORKSPACE</span>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'dashboard' else '' }}"
-                href="{{ url_for('dashboard') }}"
-            >
-                <i>⌂</i>
-                Dashboard
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'inventory_page' else '' }}"
-                href="{{ url_for('inventory_page') }}"
-            >
-                <i>▦</i>
-                Inventory
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'requests_page' else '' }}"
-                href="{{ url_for('requests_page') }}"
-            >
-                <i>↗</i>
-                Requests
-            </a>
-
-            <a
-                class="{{ 'active' if request.endpoint == 'forecast_page' else '' }}"
-                href="{{ url_for('forecast_page') }}"
-            >
-                <i>⌁</i>
-                AI Demand Forecast
-            </a>
-
-
-            <span>OPERATIONS</span>
-
-            {% if me and me.role == 'Purchasing' %}
-
-            <a
-                class="{{ 'active' if request.endpoint == 'vendors_page' else '' }}"
-                href="{{ url_for('vendors_page') }}"
-            >
-                <i>◇</i>
-                Vendors & Purchasing
-            </a>
-
+        <nav class="workspace-nav" aria-label="Main navigation">
+            <span>OVERVIEW</span>
+            <a class="{{ 'active' if request.endpoint=='dashboard' else '' }}" href="{{url_for('dashboard')}}"><i>⌂</i>Dashboard</a>
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Employee','Finance') %}<span>INVENTORY OPERATIONS</span>{% endif %}
+            {% if me.role in ('Super User','Encoder','Admin','Inventory Manager') %}
+            <a class="{{ 'active' if request.endpoint=='inventory_page' else '' }}" href="{{url_for('inventory_page')}}"><i>▦</i>Inventory & Stock</a>
+            <a class="{{ 'active' if request.endpoint in ('inventory_audit_page','inventory_audit_detail') else '' }}" href="{{url_for('inventory_audit_page')}}"><i>◎</i>Physical Inventory</a>
             {% endif %}
-
-
-            {% if me and me.role == 'HR' %}
-
-            <a
-                class="{{ 'active' if request.endpoint == 'users_page' else '' }}"
-                href="{{ url_for('users_page') }}"
-            >
-                <i>⚙</i>
-                Users & Audit
-            </a>
-
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Employee') %}
+            <a class="{{ 'active' if request.endpoint=='assignments_page' else '' }}" href="{{url_for('assignments_page')}}"><i>✓</i>{{'My Items' if me.role=='Employee' else 'Assignments'}}</a>
+            <a class="{{ 'active' if request.endpoint=='requests_page' else '' }}" href="{{url_for('requests_page')}}"><i>↗</i>{{'My Requests' if me.role=='Employee' else 'Stock Requests'}}</a>
             {% endif %}
-
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Finance') %}
+            <a class="{{ 'active' if request.endpoint=='asset_controls_page' or (request.endpoint and request.endpoint.startswith(('disposal_','adjustment_'))) else '' }}" href="{{url_for('asset_controls_page')}}"><i>⚖</i>Approvals & Corrections</a>
+            <a class="{{ 'active' if request.endpoint=='asset_operations_page' and request.args.get('view')!='maintenance' else '' }}" href="{{url_for('asset_operations_page',view='circulation')}}"><i>⇄</i>Asset Circulation</a>
+            <a class="{{ 'active' if request.endpoint=='asset_operations_page' and request.args.get('view')=='maintenance' else '' }}" href="{{url_for('asset_operations_page',view='maintenance')}}"><i>⚒</i>Maintenance</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Requisition Officer','Finance') %}<span>PURCHASING</span>{% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Requisition Officer') %}
+            <a class="{{ 'active' if request.endpoint=='requisitions_page' else '' }}" href="{{url_for('requisitions_page')}}"><i>▤</i>Purchase Requisitions</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Requisition Officer','Encoder','Finance') %}
+            <a class="{{ 'active' if request.endpoint and request.endpoint.startswith('procurement_') or request.endpoint=='procurement_page' else '' }}" href="{{url_for('procurement_page')}}"><i>▣</i>Procurement & Receiving</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Requisition Officer') %}
+            <a class="{{ 'active' if request.endpoint=='vendors_page' else '' }}" href="{{url_for('vendors_page')}}"><i>◈</i>Suppliers</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Requisition Officer','Finance','Report Generator') %}<span>INSIGHTS & ADMIN</span>{% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Encoder','Report Generator') %}
+            <a class="{{ 'active' if request.endpoint=='forecast_page' else '' }}" href="{{url_for('forecast_page')}}"><i>⌁</i>Demand Forecasting</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Report Generator','Finance') %}
+            <a class="{{ 'active' if request.endpoint=='reports_v4' else '' }}" href="{{url_for('reports_v4')}}"><i>▤</i>Inventory Reports</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin','Inventory Manager','Requisition Officer','Finance','Report Generator') %}
+            <a class="{{ 'active' if request.endpoint=='client_reports' else '' }}" href="{{url_for('client_reports')}}"><i>⇩</i>Detailed Exports</a>
+            {% endif %}
+            {% if me.role in ('Super User','Admin') %}
+            <a class="{{ 'active' if request.endpoint=='users_page' else '' }}" href="{{url_for('users_page')}}"><i>♙</i>Users</a>
+            <a class="{{ 'active' if request.endpoint=='audit_trail_page' else '' }}" href="{{url_for('audit_trail_page')}}"><i>◷</i>Audit Trail</a>
+            <a class="{{ 'active' if request.endpoint=='lifecycle_page' else '' }}" href="{{url_for('lifecycle_page')}}"><i>◴</i>Asset Lifecycle</a>
+            {% endif %}
         </nav>
-
-
-        <!-- INVENTORY CATEGORIES -->
-
-        <div class="catnav">
-
-            <span>INVENTORY CATEGORIES</span>
-
-            {% for c in categories %}
-
-            <a
-                href="{{ url_for('inventory_page') }}?category={{ c | urlencode }}"
-                class="category-link"
-            >
-                <i></i>
-
-                <span class="category-name">
-                    {{ c }}
-                </span>
-
-                <b>
-                    {{ category_counts.get(c, 0) }}
-                </b>
-            </a>
-
-            {% endfor %}
-
-        </div>
-
-
-        <div class="sidebar-foot">
-
-            inharitense — CSC 0313.1<br>
-            Integrated Inventory Management<br>
-
-            <small>
-                Weekly update workflow
-            </small>
-
-        </div>
-
+        {% if me.role in ('Super User','Encoder','Admin','Inventory Manager') %}
+        <details class="catnav nav-categories">
+            <summary>Browse inventory categories <span aria-hidden="true">⌄</span></summary>
+            {% for c in categories %}<a href="{{ url_for('inventory_page') }}?category={{ c | urlencode }}" class="category-link"><i></i><span class="category-name">{{c}}</span><b>{{category_counts.get(c,0)}}</b></a>{% endfor %}
+        </details>
+        {% endif %}
+        <div class="sidebar-foot">ECMCI · Integrated Inventory Management<br><small>Centralized stock and asset operations</small></div>
     </aside>
 
-
-    <main class="main">
-
-        <header class="topbar">
-
-            <div class="page-heading">
-
-                <div class="eyebrow">
-                    LIVE OPERATIONS
+    <main class="main figma-main">
+        <header class="topbar figma-topbar">
+            <div class="header-start">
+                <div class="header-nav-controls" aria-label="Page navigation">
+                    <button class="header-icon-btn back-button" id="backButton" type="button" title="Go back" aria-label="Go back" data-fallback-url="{{ url_for('dashboard') }}"><span aria-hidden="true">←</span></button>
+                    <button class="header-icon-btn nav-open" id="navToggle" type="button" aria-controls="appNav" aria-expanded="false" title="Open navigation" aria-label="Open navigation"><span aria-hidden="true">☰</span></button>
                 </div>
-
-                <h1>
-                    {% block heading %}
-                    Centralized Inventory
-                    {% endblock %}
-                </h1>
-
-                <p>
-                    {% block subtitle %}
-                    One workspace for inventory visibility, requests, purchasing, and demand planning.
-                    {% endblock %}
-                </p>
-
-            </div>
-
-
-            <div class="top-actions">
-
-                <button
-                    class="icon-btn"
-                    id="themeBtn"
-                    title="Toggle theme"
-                    type="button"
-                >
-                    ☼
-                </button>
-
-
-                <button
-                    class="notif-btn"
-                    id="notifBtn"
-                    title="Notifications"
-                    type="button"
-                >
-                    ♢
-                    <span id="notifBadge" class="badge-dot"></span>
-                </button>
-
-
-                <div class="profile">
-
-                    <span class="avatar">
-                        {{ me.name[:1] }}
-                    </span>
-
-                    <div>
-                        <b>{{ me.name }}</b>
-                        <small>{{ role_labels[me.role] }}</small>
-                    </div>
-
-                    <a href="{{ url_for('logout') }}">
-                        Log out
-                    </a>
-
+                <div class="page-heading">
+                    <div class="eyebrow">{% block eyebrow %}LIVE OPERATIONS{% endblock %}</div>
+                    <h1>{% block heading %}Centralized Inventory{% endblock %}</h1>
+                    <p>{% block subtitle %}A centralized workspace for inventory, asset movement, procurement, and reporting.{% endblock %}</p>
                 </div>
-
             </div>
-
+            <div class="top-actions figma-top-actions">
+                <div class="theme-shell">
+                    <button class="icon-btn theme-toggle" id="themeBtn" title="Switch color theme" aria-label="Switch color theme" type="button"><span class="theme-sun" aria-hidden="true">☀</span><span class="theme-moon" aria-hidden="true">☾</span></button>
+                </div>
+                <button class="notif-btn" id="notifBtn" title="Notifications" type="button" aria-label="Notifications"><span aria-hidden="true">♧</span><span id="notifBadge" class="badge-dot"></span></button>
+                <div class="profile figma-profile profile-menu">
+                    <button class="profile-settings profile-trigger" id="profileMenuToggle" type="button" aria-expanded="false" aria-controls="profileMenu" aria-label="Open profile menu"><span class="avatar">{{me.name[:1]}}</span></button>
+                    <div class="profile-meta"><b>{{me.name}}</b><small>{{role_labels.get(me.role,me.role)}}</small></div>
+                    <div class="profile-dropdown" id="profileMenu" hidden><a href="{{url_for('account_settings')}}">Settings</a><a href="{{url_for('logout')}}">Log Out</a></div>
+                </div>
+            </div>
         </header>
 
-
-        {% with msgs = get_flashed_messages(with_categories=true) %}
-
-            {% if msgs %}
-
-            <div class="flashes">
-
-                {% for cat, msg in msgs %}
-
-                <div class="flash {{ cat }}">
-                    {{ msg }}
-                </div>
-
-                {% endfor %}
-
-            </div>
-
-            {% endif %}
-
+        {% with msgs=get_flashed_messages(with_categories=true) %}
+        {% if msgs %}<div class="flashes">{% for cat,msg in msgs %}<div class="flash {{cat}}">{{msg}}</div>{% endfor %}</div>{% endif %}
         {% endwith %}
 
-
-        {% block content %}{% endblock %}
-
+        <div class="page-content">{% block content %}{% endblock %}</div>
     </main>
-
 </div>
-
 
 <div id="toast" class="toast"></div>
+<div id="notifPanel" class="notif-panel"><div class="notif-head"><b>Notifications</b><button type="button" onclick="markNotificationsRead()">Mark all read</button></div><div id="notifList"></div></div>
+<div id="confirmModal" class="modal"><div class="modal-card"><div class="modal-head"><h2>Please confirm</h2></div><p id="confirmMessage" class="muted"></p><div class="modal-actions"><button type="button" class="secondary" id="confirmNo">Cancel</button><button type="button" class="danger" id="confirmYes">Confirm</button></div></div></div>
+<div id="quantityModal" class="modal"><div class="modal-card"><div class="modal-head"><h2 id="quantityTitle">Enter quantity</h2></div><input id="quantityInput" type="number" min="1" value="1"><div class="modal-actions"><button type="button" class="secondary" id="quantityCancel">Cancel</button><button type="button" class="primary" id="quantityOk">Confirm</button></div></div></div>
+<dialog id="unsavedChangesDialog" class="figma-dialog unsaved-dialog" aria-labelledby="unsavedChangesTitle" aria-describedby="unsavedChangesMessage"><div class="figma-panel-title"><span class="figma-iconbox">!</span><div><h2 id="unsavedChangesTitle">Unsaved changes</h2><p id="unsavedChangesMessage">You have unsaved changes. Are you sure you want to leave? Any information you entered will not be saved.</p></div></div><div class="figma-form-actions"><button type="button" class="secondary" data-unsaved-continue>Continue Editing</button><button type="button" class="danger" data-unsaved-discard>Discard Changes</button></div></dialog>
 
-
-<div id="notifPanel" class="notif-panel">
-
-    <div class="notif-head">
-
-        <b>Notifications</b>
-
-        <button
-            type="button"
-            onclick="markNotificationsRead()"
-        >
-            Mark all read
-        </button>
-
-    </div>
-
-    <div id="notifList"></div>
-
-</div>
-
-
-<div id="confirmModal" class="modal">
-
-    <div
-        class="modal-card"
-        style="width:min(420px,100%);"
-    >
-
-        <div class="modal-head">
-            <h2>Please confirm</h2>
-        </div>
-
-        <p
-            id="confirmMessage"
-            class="muted"
-            style="font-size:11px;"
-        ></p>
-
-        <div class="modal-actions">
-
-            <button
-                type="button"
-                class="secondary"
-                id="confirmNo"
-            >
-                Cancel
-            </button>
-
-            <button
-                type="button"
-                class="danger"
-                id="confirmYes"
-            >
-                Confirm
-            </button>
-
-        </div>
-
-    </div>
-
-</div>
-
-
-<div id="quantityModal" class="modal">
-
-    <div
-        class="modal-card"
-        style="width:min(360px,100%);"
-    >
-
-        <div class="modal-head">
-            <h2 id="quantityTitle">
-                Enter quantity
-            </h2>
-        </div>
-
-        <input
-            id="quantityInput"
-            type="number"
-            min="1"
-            value="1"
-            style="width:100%;min-height:42px;border:1px solid var(--line);border-radius:9px;padding:10px;"
-        >
-
-        <div class="modal-actions">
-
-            <button
-                type="button"
-                class="secondary"
-                id="quantityCancel"
-            >
-                Cancel
-            </button>
-
-            <button
-                type="button"
-                class="primary"
-                id="quantityOk"
-            >
-                Confirm
-            </button>
-
-        </div>
-
-    </div>
-
-</div>
-
-
-<script src="{{ url_for('static', filename='js/app.js') }}"></script>
-
+<script src="{{url_for('static',filename='js/app.js')}}"></script>
+<script src="{{url_for('static',filename='js/security-ui.js')}}" defer></script>
+<script src="{{url_for('static',filename='js/drafts-ui.js')}}" defer></script>
+<script src="{{url_for('static',filename='js/unsaved-changes.js')}}" defer></script>
+<script src="{{url_for('static',filename='js/figma-ui.js')}}" defer></script>
 {% block scripts %}{% endblock %}
-
+<script defer src="{{url_for('static',filename='js/workspace-redesign.js')}}"></script>
+<script defer src="{{url_for('static',filename='js/report-ui.js')}}"></script>
 </body>
 </html>

@@ -1,1 +1,461 @@
-{% extends 'base.html' %}{% block heading %}AI Demand Forecast{% endblock %}{% block subtitle %}Historical Stock OUT activity → demand estimate → dynamic reorder recommendation.{% endblock %}{% block content %}<div class="page-toolbar"><div><div class="eyebrow">PLANNING & DECISION SUPPORT</div><h2>Forecast by inventory item</h2><p>Actual transaction history is used when available; the model recommends but does not purchase.</p></div></div><div class="panel"><div class="toolbar"><input id="forecastSearch" type="text" placeholder="Search item or item number…" oninput="filterForecastItems()" style="flex:1;"><select id="forecastItem" onchange="initForecastLoad()">{% for cat, group in items | groupby('category') %}<optgroup label="{{ cat }}">{% for i in group %}<option value="{{ i.id }}" data-search="{{ (i.name ~ ' ' ~ i.item_no) | lower }}">{{ i.name }} ({{ i.item_no }})</option>{% endfor %}</optgroup>{% endfor %}</select></div><div class="form-grid" style="margin-bottom:12px;"><label>Supplier lead time (days)<input id="fcLead" type="number" min="0" value="5" onchange="initForecastLoad()"></label><label>Safety stock threshold<input id="fcSafety" type="number" min="0" value="3" onchange="initForecastLoad()"></label></div><div class="grid two"><div class="chart-panel"><canvas id="forecastChart"></canvas></div><div id="forecastOutput" class="forecast-output"></div></div><div class="note"><b>Forecasting note:</b> this system currently uses a transparent demand-rate calculation over recent Stock OUT transactions. The final machine-learning model should be trained and validated on ECMCI's cleaned historical data.</div></div>{% endblock %}{% block scripts %}<script>initForecast();</script>{% endblock %}
+{% extends 'base.html' %}
+
+{% block heading %}
+    AI Demand Forecast
+{% endblock %}
+
+{% block subtitle %}
+    See how quickly supplies are used and when to plan your next order.
+{% endblock %}
+
+{% block content %}
+
+<div class="page-toolbar forecast-toolbar-head">
+
+    <div>
+
+        <div class="eyebrow">
+            PLANNING & DECISION SUPPORT
+        </div>
+
+        <h2>
+            Demand forecast
+        </h2>
+
+        <p>
+            Choose a consumable item to see expected usage, remaining stock coverage, and ordering advice.
+        </p>
+
+    </div>
+
+    <button type="button" class="secondary" id="forecastDemoButton">Preview with sample data</button>
+
+</div>
+
+
+<!-- =========================================================
+     INVENTORY SELECTION
+     ========================================================= -->
+
+<div
+    class="panel forecast-selection-panel"
+    id="forecastItemSelection"
+>
+
+    <div class="forecast-selection-head">
+
+        <div>
+
+            <div class="eyebrow">
+                INVENTORY SELECTION
+            </div>
+
+            <h2>
+                What do you want to forecast?
+            </h2>
+
+            <p>
+                Choose a category to reveal its inventory items.
+            </p>
+
+        </div>
+
+
+        <div class="forecast-search-wrap">
+
+            <span class="forecast-search-icon">
+                ⌕
+            </span>
+
+            <input
+                id="forecastSearch"
+                type="text"
+                placeholder="Search item or item number..."
+                autocomplete="off"
+            >
+
+        </div>
+
+    </div>
+
+
+    <!-- =====================================================
+         CATEGORY ACCORDION
+         ===================================================== -->
+
+    <div class="forecast-category-list">
+
+        {% for cat, group in items | groupby('category') %}
+
+        <div
+            class="forecast-category-group"
+            data-category="{{ cat }}"
+        >
+
+            <button
+                type="button"
+                class="forecast-category"
+                data-category="{{ cat }}"
+                aria-expanded="false"
+            >
+
+                <span class="forecast-category-left">
+
+                    <span class="forecast-category-icon">
+                        ●
+                    </span>
+
+                    <span class="forecast-category-name">
+                        {{ cat }}
+                    </span>
+
+                </span>
+
+
+                <span class="forecast-category-right">
+
+                    <span class="forecast-category-count">
+                        {{ group | list | length }}
+                    </span>
+
+                    <span class="forecast-chevron">
+                        ›
+                    </span>
+
+                </span>
+
+            </button>
+
+
+            <!-- ITEMS INSIDE CATEGORY -->
+
+            <div
+                class="forecast-category-items"
+                hidden
+            >
+
+                {% for i in group %}
+
+                <button
+                    type="button"
+                    class="forecast-item-card"
+                    data-id="{{ i.id }}"
+                    data-category="{{ i.category }}"
+                    data-search="{{
+                        (
+                            i.name ~ ' ' ~
+                            i.item_no ~ ' ' ~
+                            (i.code or '') ~ ' ' ~
+                            i.category
+                        ) | lower
+                    }}"
+                >
+
+                    <span class="forecast-item-main">
+
+                        <strong>
+                            {{ i.name }}
+                        </strong>
+
+                        <small>
+                            {{ i.item_no }} · {{ i.unit }}
+                        </small>
+
+                    </span>
+
+
+                    <span class="forecast-item-side">
+
+                        <span class="forecast-stock-number">
+                            {{ i.qty }}
+                        </span>
+
+                        <span class="forecast-stock-label">
+                            on hand
+                        </span>
+
+
+                        <span
+                            class="status {{ 'low' if i.qty <= i.min_qty else 'ok' }}"
+                        >
+
+                            {% if i.qty == 0 %}
+
+                                Out
+
+                            {% elif i.qty <= i.min_qty %}
+
+                                Reorder
+
+                            {% else %}
+
+                                Healthy
+
+                            {% endif %}
+
+                        </span>
+
+                    </span>
+
+                </button>
+
+                {% endfor %}
+
+            </div>
+
+        </div>
+
+        {% endfor %}
+
+    </div>
+
+
+    <!-- SEARCH EMPTY -->
+
+    <div
+        id="forecastEmpty"
+        class="forecast-empty"
+        hidden
+    >
+
+        <strong>
+            No matching inventory item
+        </strong>
+
+        <span>
+            Try another item name or item number.
+        </span>
+
+    </div>
+
+</div>
+
+
+
+<!-- =========================================================
+     FORECAST WORKSPACE
+     ========================================================= -->
+
+<div class="forecast-workspace panel">
+
+    <div class="forecast-workspace-head">
+
+        <div>
+
+            <div class="eyebrow">
+                <span id="forecastSourceLabel">LIVE FORECAST</span>
+            </div>
+
+            <h2 id="forecastSelectedName">
+                Select an inventory item
+            </h2>
+
+            <p id="forecastSelectedMeta">
+                Your selected item's transaction history and
+                demand estimate will appear here.
+            </p>
+
+        </div>
+
+
+        <div
+            class="forecast-selected-badge"
+            id="forecastSelectedBadge"
+        >
+            No item selected
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         FORECAST SETTINGS
+         ===================================================== -->
+
+    <div class="note forecast-demo-banner" id="forecastDemoBanner" hidden>
+        <b>Sample data — demonstration only</b>
+        <p id="forecastDemoDisclaimer">This preview uses illustrative usage and sample stock. It does not change real records.</p>
+        <button type="button" class="secondary" id="forecastLiveButton">Return to actual records</button>
+    </div>
+    <details class="form-section forecast-settings"><summary>Adjust delivery time and safety stock</summary><div class="form-grid section-fields">
+
+        <label>
+
+            Supplier lead time (days)
+
+            <input
+                id="fcLead"
+                type="number"
+                min="0"
+                step="1"
+                value="5"
+            >
+
+        </label>
+
+
+        <label>
+
+            Safety stock threshold
+
+            <input
+                id="fcSafety"
+                type="number"
+                min="0"
+                step="1"
+                value="3"
+            >
+
+        </label>
+
+    </div></details>
+
+
+
+    <!-- =====================================================
+         GRAPH + MODEL OUTPUT
+         ===================================================== -->
+
+    <div class="forecast-grid">
+
+
+        <!-- STOCK MOVEMENT -->
+
+        <div class="forecast-chart-panel">
+
+            <div class="panel-head">
+
+                <div>
+
+                    <h3>
+                        Past usage and next week
+                    </h3>
+
+                    <small>
+                        Recent complete weeks of usage, followed by the next-week estimate
+                    </small>
+
+                </div>
+
+
+                <div class="forecast-legend">
+
+                    <span>
+                        <i class="forecast-dot in"></i>
+                        Past usage
+                    </span>
+
+                    <span>
+                        <i class="forecast-dot out"></i>
+                        Forecast
+                    </span>
+
+                </div>
+
+            </div>
+
+
+            <div class="forecast-chart-wrap">
+
+                <canvas id="forecastChart"></canvas>
+
+            </div>
+
+
+            <div class="forecast-chart-summary">
+
+                <div>
+
+                    <span>
+                        Last week used
+                    </span>
+
+                    <strong id="forecastTotalIn">
+                        0
+                    </strong>
+
+                </div>
+
+
+                <div>
+
+                    <span>
+                        Next week estimate
+                    </span>
+
+                    <strong id="forecastTotalOut">
+                        0
+                    </strong>
+
+                </div>
+
+
+                <div>
+
+                    <span>
+                        Weeks with usage
+                    </span>
+
+                    <strong id="forecastActivityDays">
+                        0
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- MODEL OUTPUT -->
+
+        <div
+            id="forecastOutput"
+            class="forecast-output"
+        >
+
+            <div class="forecast-placeholder">
+
+                <div class="forecast-placeholder-icon">
+                    ✦
+                </div>
+
+                <h3>
+                    Ready when you are
+                </h3>
+
+                <p>
+                    Select a category above, then choose an
+                    inventory item to see its demand estimate,
+                    reorder point, and recommended quantity.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+
+    <!-- =====================================================
+         NOTE
+         ===================================================== -->
+
+    <div class="note forecast-note"><b>Planning guidance:</b> Live predictions need Stock OUT usage in at least four complete weeks. Sample preview demonstrates the calculation without changing records. Predictions are based on recorded usage. Unusual demand, missing transactions, or supplier delays can change the outcome. Review the recommendation before preparing a requisition.</div>
+
+</div>
+
+{% endblock %}
+
+
+
+{% block scripts %}
+
+<script>
+    initForecast();
+</script>
+
+{% endblock %}

@@ -1,1 +1,52 @@
-{% extends 'base.html' %}{% block heading %}Users & Audit{% endblock %}{% block subtitle %}HR-controlled accounts, role assignment, and confidential audit records.{% endblock %}{% block content %}<div class="grid two"><div class="panel"><div class="eyebrow">USER ADMINISTRATION</div><h3>Create account</h3><form class="form-grid" method="post" action="{{url_for('user_create')}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<label>Name<input name="name" required></label><label>Work email<input name="email" type="email" required></label><label>Role<select name="role"><option>HR</option><option>Purchasing</option><option>IT Custodian</option><option>Department User</option></select></label><label>Department<input name="department" placeholder="Office Operations / IT"></label><button class="primary wide span2">Create account</button></form><div class="note">New accounts receive the temporary password <b>ECMCI@Welcome1</b>.</div></div><div class="panel"><div class="eyebrow">ROLE ACCESS</div><h3>Active accounts</h3>{% for u in users %}<div class="user-row"><div><b>{{u.name}}</b><small>{{u.email}} · {{role_labels[u.role]}}</small></div><div><span class="status {{'ok' if u.active else 'low'}}">{{'Active' if u.active else 'Disabled'}}</span>{% if u.id != me.id %}<form style="display:inline" method="post" action="{{url_for('user_toggle',uid=u.id)}}">{% if request.endpoint != "login" %}<input type="hidden" name="_csrf" value="{{csrf_token()}}">{% endif %}<button class="secondary small">{{'Disable' if u.active else 'Enable'}}</button></form>{% endif %}</div></div>{% endfor %}</div></div><div class="panel"><div class="panel-head"><div><div class="eyebrow">CONFIDENTIAL AUDIT</div><h3>Audit trail</h3><small>HR is responsible for reviewing audit activity; IT does not handle the audit.</small></div><a class="secondary" href="{{url_for('report',kind='movements')}}">Export movements</a></div><div class="audit">{% for a in audits %}<div><b>{{a.action}}</b><small>{{a.user_name or 'System'}} · {{a.created_at|dt}}{% if a.item_no %} · {{a.item_no}}{% endif %}</small></div>{% else %}<div class="empty">No audit activity yet.</div>{% endfor %}</div></div>{% endblock %}
+{% extends 'base.html' %}
+{% block title %}Users{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}Users{% endblock %}
+{% block subtitle %}Account administration and role management. Manage account access and assigned system permissions.{% endblock %}
+{% block content %}
+{% if one_time_credentials %}
+<div class="flash success one-time-credential" role="status" aria-live="polite">
+    <strong>Account created successfully: {{one_time_credentials.name}}</strong>
+    <p>Share this temporary password with the account holder through an approved secure channel. It is shown only in this response and will not be available after leaving this page.</p>
+    <code id="generatedTemporaryPassword">{{one_time_credentials.password}}</code>
+    <button class="secondary small" type="button" data-copy-temp-password>Copy temporary password</button>
+</div>
+{% endif %}
+<div class="user-admin-grid">
+    <aside class="user-admin-left">
+        <section class="figma-surface user-create-card">
+            <div class="figma-panel-title"><div><h2>Account Creation</h2><p>Recently created accounts</p></div></div>
+            <div class="mini-account-list">
+                {% for u in recent_accounts %}<div class="mini-account-row"><strong>{{u.name}}</strong><small>{{u.created_at|dt if u.created_at else 'Date not recorded'}}</small></div>{% else %}<div class="empty">No accounts created yet.</div>{% endfor %}
+            </div>
+            <button class="figma-action wide" type="button" data-modal-open="createAccountDialog">＋ &nbsp; Create Account</button>
+        </section>
+        <section class="figma-surface user-roles-card">
+            <h2>Role Information</h2>
+            <ul>{% for role in ('Admin','Inventory Manager','Encoder','Requisition Officer','Finance','Report Generator','Employee','Super User') %}<li>{{role_labels.get(role,role)}}</li>{% endfor %}</ul>
+            <p class="figma-footnote">Assign only the role required for each person's responsibilities. Role permissions are enforced by the application.</p>
+        </section>
+    </aside>
+    <section class="figma-surface user-active-card">
+        <div class="workspace-kicker">ROLE ACCESS</div>
+        <h2>Active Accounts</h2>
+        <div class="figma-table-shell"><table class="user-table"><thead><tr><th>Account</th><th>Email</th><th>Role</th><th>Status</th><th>Manage</th></tr></thead><tbody>
+        {% for u in users %}<tr><td><strong>{{u.name}}</strong><small>{{u.department or 'Department not set'}}</small></td><td>{{u.email}}</td><td>{{role_labels.get(u.role,u.role)}}</td><td><span class="status-pill {{'completed' if u.active else 'rejected'}}">{{'Active' if u.active else 'Disabled'}}</span></td><td>{% if u.id != me.id %}<form method="post" action="{{url_for('user_toggle',uid=u.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="secondary small">{{'Disable' if u.active else 'Enable'}}</button></form>{% else %}<span class="muted">Current account</span>{% endif %}</td></tr>{% else %}<tr><td colspan="5" class="empty">No user accounts found.</td></tr>{% endfor %}
+        </tbody></table></div>
+        <div class="user-audit-link"><span class="muted">System activity is available in the separate audit workspace.</span><a class="secondary small" href="{{url_for('audit_trail_page')}}">Open Audit Trail →</a></div>
+    </section>
+</div>
+<dialog id="createAccountDialog" class="figma-dialog" data-ui-modal>
+    <form method="dialog" class="dialog-x"><button aria-label="Close" class="secondary" value="cancel">×</button></form>
+    <div class="figma-panel-title"><span class="figma-iconbox">＋</span><div><h2>Create Account</h2><p>Create a user account with a role and department.</p></div></div>
+    <form class="figma-form-grid dialog-form" method="post" action="{{url_for('user_create')}}">
+        <input type="hidden" name="_csrf" value="{{csrf_token()}}">
+        <label class="full">Employee name<input name="name" maxlength="100" required></label>
+        <label class="full">Work email<input name="email" type="email" maxlength="254" required></label>
+        <label>System role<select name="role" required><option value="" disabled selected>Choose a role</option>{% for role in ('Admin','Inventory Manager','Encoder','Requisition Officer','Finance','Report Generator','Employee','Super User') %}<option value="{{role}}">{{role_labels.get(role,role)}}</option>{% endfor %}</select></label>
+        <label>Department<input name="department" maxlength="100" placeholder="e.g. IT, Admin, Operations"></label>
+        <div class="form-hint full">A unique random temporary password will be generated. The account holder must change it before accessing other system features. The password will be displayed once after account creation.</div>
+        <div class="figma-form-actions full"><button type="button" class="secondary" data-modal-close>Cancel</button><button class="primary" type="submit">Create Account</button></div>
+    </form>
+</dialog>
+{% endblock %}

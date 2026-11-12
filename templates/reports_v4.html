@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block heading %}Inventory Reports{% endblock %}
+{% block subtitle %}Review current stock, narrow results, and export what you need.{% endblock %}
+{% block content %}
+<div class="report-workspace">
+  {% set total_units = rows | sum(attribute='qty') %}
+  <div class="report-toolbar">
+    <div class="report-toolbar-label"><span class="report-dot"></span><span>INVENTORY OVERVIEW</span></div>
+    <div class="report-toolbar-actions">
+      <a class="report-action" href="{{url_for('reports_v4_export',**request.args)}}">↓ Export CSV</a>
+      <a class="report-action report-action-primary" href="{{url_for('report_xlsx',kind='movements',**request.args)}}">↓ Excel movements</a>
+      <a class="report-action" href="{{url_for('reports_pdf',kind='movements',**request.args)}}">↗ Download PDF</a>
+    </div>
+  </div>
+  <section class="report-summary" aria-label="Report summary">
+    <div class="report-stat"><span class="report-stat-icon">▦</span><div><span>Inventory records</span><strong>{{rows|length}}</strong><small>Current filtered list</small></div></div>
+    <div class="report-stat"><span class="report-stat-icon">▤</span><div><span>Units on hand</span><strong>{{total_units}}</strong><small>Current quantity, not historical</small></div></div>
+    <div class="report-stat"><span class="report-stat-icon">◈</span><div><span>Categories shown</span><strong>{{rows|map(attribute='category')|unique|list|length}}</strong><small>In filtered results</small></div></div>
+    <div class="report-stat"><span class="report-stat-icon">✓</span><div><span>With custody info</span><strong>{{rows|rejectattr('assignment_department','equalto','Unassigned')|list|length}}</strong><small>Records with department/custody</small></div></div>
+  </section>
+  <section class="report-panel report-filters">
+    <div class="report-section-heading"><div><h2>Filters</h2><p>Find records by acquisition date and assigned department.</p></div><a class="report-reset" href="{{url_for('reports_v4')}}">Clear all</a></div>
+    <form method="get" class="report-filter-grid">
+      <label>Acquired from<input type="date" name="start" value="{{filters.start}}"></label>
+      <label>Acquired until<input type="date" name="end" value="{{filters.end}}"></label>
+      <label>Department<select name="department"><option value="">All departments</option>{% for d in depts %}<option value="{{d.department}}" {{'selected' if filters.department==d.department else ''}}>{{d.department}}</option>{% endfor %}</select></label>
+      <label>Period<select name="period"><option value="">All dates</option><option value="week" {{'selected' if period=='week' else ''}}>This week</option><option value="month" {{'selected' if period=='month' else ''}}>This month</option></select></label>
+      <button class="primary report-apply" type="submit">Apply filters</button>
+    </form>
+    {% if filter_chips %}<div class="report-active-filters" aria-label="Active filters">{% for chip in filter_chips %}<a class="filter-chip" href="{{chip.url}}" aria-label="Remove {{chip.label}} filter">{{chip.label}}: {{chip.value}} ×</a>{% endfor %}</div>{% endif %}
+  </section>
+  <section class="report-panel report-records" data-report-table>
+    <div class="report-records-top"><div><h2>Inventory records</h2><p>{{rows|length}} matching records · current stock balance</p></div>
+    <label class="report-search-label"><span class="sr-only">Search displayed records</span><input class="report-table-search" type="search" placeholder="Search tag, item, category…" autocomplete="off"></label></div>
+    <div class="table-wrap report-table-wrap"><table><thead><tr><th>Inventory tag</th><th>Description</th><th>Category</th><th>Acquired</th><th>Department / Custody</th><th class="report-num">On hand</th></tr></thead><tbody>
+      {% for i in rows %}<tr data-record-row><td><b>{{i.item_no}}</b></td><td>{{i.name}}</td><td>{{i.category}}</td><td>{{i.received_date or 'Not recorded'}}</td><td>{{i.assignment_department}}</td><td class="report-num"><strong>{{i.qty}}</strong></td></tr>{% else %}<tr><td colspan="6" class="report-empty">No records match these filters. Try clearing a filter.</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="report-table-footer"><span class="report-page-count" aria-live="polite"></span><div class="report-page-actions"><button type="button" class="secondary report-prev">← Previous</button><button type="button" class="secondary report-next">Next →</button></div></div>
+  </section>
+  <details class="report-help"><summary>How these report periods work</summary><p>Weekly and monthly views set the stock-movement reporting period and include items acquired up to its end. Acquisition dates narrow inventory records. On-hand quantities are current values, not historical balances.</p></details>
+</div>
+{% endblock %}

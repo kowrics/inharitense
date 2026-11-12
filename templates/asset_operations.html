@@ -1,0 +1,129 @@
+{% extends 'base.html' %}
+{% set page_view = view|default('circulation') %}
+{% block title %}{{ 'Maintenance' if page_view == 'maintenance' else 'Asset Circulation' }}{% endblock %}
+{% block eyebrow %}LIVE OPERATIONS{% endblock %}
+{% block heading %}{{ 'Maintenance' if page_view == 'maintenance' else 'Asset Circulation' }}{% endblock %}
+{% block subtitle %}{% if page_view == 'maintenance' %}Start a maintenance record, then review its history in a separate workspace.{% else %}Track assets assigned, transferred, and returned between employees or departments.{% endif %}{% endblock %}
+{% block content %}
+{% if page_view == 'maintenance' %}
+<section class="maintenance-layout figma-two-col">
+    <div class="figma-surface figma-activity">
+        <div class="figma-panel-title"><span class="figma-iconbox">⚒</span><div><h2>Recent Maintenance</h2><p>Latest maintenance and condition updates</p></div></div>
+        {% for m in repairs[:6] %}
+        <div class="figma-activity-item"><span class="figma-iconbox">⚙</span><div><strong>{{m.kind}} recorded</strong><small>{{m.item_no}} · {{m.item_name}}</small><small>{{m.performed_on}} · {{m.condition_after}}</small></div></div>
+        {% else %}<div class="empty">No maintenance activity has been recorded.</div>{% endfor %}
+    </div>
+    <div class="figma-surface">
+        <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">⚒</span><div><h2>Record Maintenance</h2><p>Track asset condition, work performed, and service costs</p></div></div></div>
+        {% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+        <form method="post" action="{{url_for('asset_maintenance_create')}}" class="figma-form-grid" id="maintenanceForm" data-maintenance-form>
+            <input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="draft_id" value="{{draft_id or ''}}">
+            <label class="full">Inventory item<select name="inventory_id" required><option value="">Choose an item</option>{% for i in items %}<option value="{{i.id}}" {{'selected' if draft_data and draft_data.inventory_id==i.id|string else ''}}>{{i.item_no}} — {{i.name}} ({{i.condition or 'Condition not set'}})</option>{% endfor %}</select></label>
+            <label>Work type<select name="kind" required><option value="" disabled {{'selected' if not draft_data or not draft_data.kind else ''}}>Choose work type</option>{% for kind in ('Inspection','Repair','Maintenance','Damage Report') %}<option {{'selected' if draft_data and draft_data.kind==kind else ''}}>{{kind}}</option>{% endfor %}</select></label>
+            <label>Condition after work<select name="condition_after" required><option value="" disabled {{'selected' if not draft_data or not draft_data.condition_after else ''}}>Choose condition</option>{% for condition in ('Good','Needs Repair','Damaged','Under Maintenance') %}<option {{'selected' if draft_data and draft_data.condition_after==condition else ''}}>{{condition}}</option>{% endfor %}</select></label>
+            <label>Performed on<input type="date" name="performed_on" value="{{draft_data.performed_on if draft_data else ''}}" required></label>
+            <label>Cost (PHP)<input type="number" name="cost" min="0" step="0.01" value="{{draft_data.cost if draft_data and draft_data.cost else '0'}}" required></label>
+            <label class="full">Work description<textarea name="description" rows="3" minlength="5" maxlength="2000" placeholder="Describe the inspection, repair, damage, or maintenance performed." required>{{draft_data.description if draft_data else ''}}</textarea></label>
+            <div class="figma-form-actions full maintenance-form-actions"><button type="reset" class="secondary">Reset Fields</button><button type="button" class="secondary" id="saveMaintenanceDraft">Save as Draft</button><button class="primary" type="submit">Save Maintenance Record</button></div>
+        </form>
+        <div class="form-hint">Maintenance drafts are saved to your account and can be reopened from this page.</div>
+        {% else %}<p class="empty">Your role can view maintenance history but cannot create a maintenance record.</p>{% endif %}
+    </div>
+</section>
+<section class="figma-surface maintenance-drafts" style="margin-top:22px">
+    <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▣</span><div><h2>Maintenance Drafts</h2><p>Saved, unsubmitted maintenance records for your account</p></div></div><span class="status-pill">{{drafts|length}} drafts</span></div>
+    <div class="maintenance-draft-list">{% for d in drafts %}<div class="maintenance-draft-row"><div><strong>{{d.title}}</strong><small>Last saved {{d.updated_at|dt}}</small></div><div class="draft-row-actions"><a class="secondary small" href="{{url_for('asset_operations_page',view='maintenance',draft=d.id)}}">Open Draft</a><form method="post" action="{{url_for('maintenance_draft_delete',draft_id=d.id)}}" data-confirm="Clear this maintenance draft? Submitted maintenance records will not be affected."><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="danger small" type="submit">Clear Draft</button></form></div></div>{% else %}<div class="empty">No saved maintenance drafts.</div>{% endfor %}</div>
+</section>
+<div id="maintenanceDraftSavedModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="maintenanceDraftSavedTitle"><div class="modal-card"><div class="modal-head"><h2 id="maintenanceDraftSavedTitle">Maintenance draft saved</h2></div><p>Your draft is saved to your account and can be reopened from the Maintenance Drafts section.</p><div class="modal-actions"><button type="button" class="secondary" id="maintenanceDraftContinue">Continue Editing</button><a class="primary" href="{{url_for('asset_operations_page',view='maintenance')}}">Exit and Close</a></div></div></div>
+<section class="figma-surface maintenance-history" style="margin-top:22px">
+    <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▤</span><div><h2>Maintenance History</h2><p>Recorded work, condition changes, and service costs</p></div></div><span class="status-pill">{{repairs|length}} records</span></div>
+    <div class="figma-table-shell"><table><thead><tr><th>Reference</th><th>Inventory Item</th><th>Work Type</th><th>Condition</th><th>Cost</th><th>Performed On</th><th>Recorded By</th><th>Recorded At</th><th>Description</th></tr></thead><tbody>
+    {% for m in repairs %}<tr id="maintenance-{{m.id}}"><td><strong>{{m.reference_no}}</strong></td><td>{{m.item_no}}<small>{{m.item_name}}</small></td><td>{{m.kind}}</td><td>{{m.condition_before}} → {{m.condition_after}}</td><td>₱{{'%.2f'|format(m.cost)}}</td><td>{{m.performed_on}}</td><td>{{m.recorder_name or '—'}}</td><td>{{m.recorded_at|dt}}</td><td>{{m.description}}</td></tr>{% else %}<tr><td colspan="9" class="empty">No maintenance records yet.</td></tr>{% endfor %}
+    </tbody></table></div>
+</section>
+{% else %}
+<section class="figma-two-col circulation-layout">
+    <aside class="figma-surface figma-activity">
+        <div class="figma-panel-title"><span class="figma-iconbox">◴</span><div><h2>Recent Activities</h2><p>View your latest asset circulation history</p></div></div>
+        {% for t in transfers[:6] %}
+        <div class="figma-activity-item"><span class="figma-iconbox">{{'↶' if t.kind=='Return' else '⇄'}}</span><div><strong>{{t.kind}} {{'Completed' if t.status=='Completed' else 'Requested'}}</strong><small>{{t.reference_no}}</small><small>{{t.requested_at|dt}}</small></div></div>
+        {% else %}<div class="empty">No transfer or return activity yet.</div>{% endfor %}
+    </aside>
+    <div class="circulation-main">
+        <section class="figma-surface">
+            <div class="figma-tabs" data-ui-tabs="circulation">
+                <button class="figma-tab is-active" type="button" role="tab" aria-selected="true" data-tab-target="transfer">⇄ &nbsp; Transfer</button>
+                <button class="figma-tab" type="button" role="tab" aria-selected="false" data-tab-target="return">↶ &nbsp; Return</button>
+            </div>
+            <div data-tabset="circulation" data-tab-panel="transfer">
+                <div class="figma-panel-title" style="margin-bottom:20px"><span class="figma-iconbox">⇄</span><div><h2>Request Transfer</h2><p>Move an item to another department or location</p></div></div>
+                {% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+                <form method="post" action="{{url_for('asset_transfer_create')}}" class="figma-form-grid" data-draft-form="asset-transfer">
+                    <input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="kind" value="Transfer">
+                    <label>Item<select name="inventory_id" required><option value="">Search for an item...</option>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} — {{i.name}} ({{i.qty}})</option>{% endfor %}</select></label>
+                    <label>Quantity<input name="quantity" type="number" min="1" placeholder="Enter quantity" required></label>
+                    <label>From Department / Location<input name="from_department" maxlength="120" required></label>
+                    <label>To Department / Location<input name="to_department" maxlength="120" required></label>
+                    <label class="full">Notes (optional)<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+                    <div class="figma-form-actions full"><button class="secondary" type="reset">Cancel</button><button class="primary" type="submit">Submit Request</button></div>
+                </form>
+                {% else %}<p class="empty">Your role can view transfer history but cannot submit a transfer.</p>{% endif %}
+            </div>
+            <div data-tabset="circulation" data-tab-panel="return" hidden>
+                <div class="figma-panel-title" style="margin-bottom:20px"><span class="figma-iconbox">↶</span><div><h2>Request Return</h2><p>Record an item being returned to its owning department or location</p></div></div>
+                {% if me.role in ('Super User','Admin','Inventory Manager','Encoder') %}
+                <form method="post" action="{{url_for('asset_transfer_create')}}" class="figma-form-grid" data-draft-form="asset-return">
+                    <input type="hidden" name="_csrf" value="{{csrf_token()}}"><input type="hidden" name="kind" value="Return">
+                    <label>Item<select name="inventory_id" required><option value="">Search for an item...</option>{% for i in items %}<option value="{{i.id}}">{{i.item_no}} — {{i.name}} ({{i.qty}})</option>{% endfor %}</select></label>
+                    <label>Quantity<input name="quantity" type="number" min="1" placeholder="Enter quantity" required></label>
+                    <label>From Department / Location<input name="from_department" maxlength="120" required></label>
+                    <label>To Department / Location<input name="to_department" maxlength="120" required></label>
+                    <label class="full">Notes (optional)<textarea name="notes" rows="2" maxlength="1000"></textarea></label>
+                    <div class="figma-form-actions full"><button class="secondary" type="reset">Clear</button><button class="primary" type="submit">Submit Return</button></div>
+                </form>
+                {% else %}<p class="empty">Your role can view return history but cannot submit a return.</p>{% endif %}
+            </div>
+        </section>
+        <section class="figma-surface" style="margin-top:14px">
+            <div class="figma-panel-head"><div class="figma-panel-title"><span class="figma-iconbox">▤</span><div><h2>Asset Custody Transfers and Returns</h2><p>Confirmed movements are retained as a custody history. Total stock is unchanged.</p></div></div></div>
+            <div class="figma-table-shell"><table><thead><tr><th>Reference</th><th>Item</th><th>Qty</th><th>Type</th><th>From → To</th><th>Requested By / At</th><th>Confirmed By / At</th><th>Status</th><th>Action</th></tr></thead><tbody>
+            {% for t in transfers %}<tr id="transfer-{{t.id}}"><td><strong>{{t.reference_no}}</strong></td><td>{{t.item_no}}<small>{{t.item_name}}</small></td><td>{{t.quantity}}</td><td>{{t.kind}}</td><td>{{t.from_department}} → {{t.to_department}}</td><td>{{t.requester_name or '—'}}<small>{{t.requested_at|dt}}</small></td><td>{{t.confirmer_name or 'Pending'}}<small>{{t.completed_at|dt if t.completed_at else '—'}}</small></td><td><span class="status-pill {{'completed' if t.status=='Completed' else 'pending'}}">{{t.status}}</span></td><td>{% if t.status=='Pending' and me.role in ('Super User','Admin','Inventory Manager') %}<form method="post" action="{{url_for('asset_transfer_complete',tid=t.id)}}"><input type="hidden" name="_csrf" value="{{csrf_token()}}"><button class="secondary small">Confirm</button></form>{% else %}—{% endif %}</td></tr>{% else %}<tr><td colspan="9" class="empty">No transfer or return records yet.</td></tr>{% endfor %}
+            </tbody></table></div>
+        </section>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById('maintenanceForm');
+  const saveButton = document.getElementById('saveMaintenanceDraft');
+  if (!form || !saveButton) return;
+  const fields = ['inventory_id','kind','condition_after','performed_on','cost','description'];
+  saveButton.addEventListener('click', async () => {
+    const payload = Object.fromEntries(fields.map(name => [name, form.elements[name]?.value || '']));
+    payload.draft_id = form.elements.draft_id?.value || null;
+    saveButton.disabled = true;
+    try {
+      const response = await secureFetch('/asset-operations/maintenance/draft', {
+        method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Unable to save the maintenance draft.');
+      form.elements.draft_id.value = result.draft_id;
+      form.dispatchEvent(new Event('ecmci:mark-saved'));
+      openUiModal('maintenanceDraftSavedModal');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally { saveButton.disabled = false; }
+  });
+  document.getElementById('maintenanceDraftContinue')?.addEventListener('click', () => closeUiModal('maintenanceDraftSavedModal'));
+  form.querySelector('button[type="reset"]')?.addEventListener('click', () => {
+    form.elements.draft_id.value = '';
+    form.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+  });
+})();
+</script>
+{% endblock %}
